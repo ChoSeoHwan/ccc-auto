@@ -41,7 +41,16 @@ BAG_TIMEOUT = 6.0
 """퀘스트창을 누르고 가방이 열리기까지 기다릴 상한."""
 
 POPUP_TIMEOUT = 5.0
-"""상자를 누르고 상세 팝업이 뜨기까지 기다릴 상한."""
+"""상자를 누르고 상세 팝업이 뜨기까지 한 번에 기다릴 상한."""
+
+USE_ATTEMPTS = 3
+"""'사용하기' 버튼을 못 찾았을 때 다시 볼 횟수.
+
+한 번 못 찾았다고 바로 접으면, 팝업이 늦게 뜨는 순간마다 퀘스트가 막힌다.
+"""
+
+USE_RETRY_INTERVAL = 1.0
+"""다시 보기까지 쉴 시간."""
 
 USE_TIMEOUT = 5.0
 """'사용하기' 를 누르고 결과 화면이 뜨기까지 기다릴 상한."""
@@ -91,14 +100,14 @@ class UseBoxFromBag(QuestDefinition):
             ctx.log(f"보물상자 선택 (일치도 {box.score:.2f})")
             ctx.tap_match(box)
 
-            use = ctx.wait_for_template(
-                USE_TEMPLATE, POPUP_TIMEOUT, MATCH_THRESHOLD, USE_SEARCH
-            )
+            use = self._find_use_button(ctx)
         except TemplateError as exc:
             return StepResult.blocked(str(exc))
 
         if use is None:
-            return StepResult.blocked("상세 팝업의 '사용하기' 버튼을 찾지 못했습니다")
+            return StepResult.blocked(
+                f"상세 팝업의 '사용하기' 버튼을 {USE_ATTEMPTS}번 확인했지만 찾지 못했습니다"
+            )
 
         ctx.log(f"'사용하기' 클릭 (일치도 {use.score:.2f})")
         ctx.tap_match(use)
@@ -107,3 +116,25 @@ class UseBoxFromBag(QuestDefinition):
         navigator = BattleScreenNavigator(ctx.anchors.get(anchor_names.NAV_CLOSE))
         ctx.wait_until(navigator.has_close_button, USE_TIMEOUT)
         return StepResult.ok()
+
+    # ------------------------------------------------------------------
+    def _find_use_button(self, ctx: Context):
+        """'사용하기' 버튼을 최대 ``USE_ATTEMPTS`` 번 확인한다.
+
+        상세 팝업이 뜨는 데 걸리는 시간이 들쭉날쭉해서, 한 번의 상한만으로는
+        늦게 뜨는 날에 그대로 막힌다. 못 찾으면 1초 쉬고 다시 본다.
+        """
+        for attempt in range(1, USE_ATTEMPTS + 1):
+            match = ctx.wait_for_template(
+                USE_TEMPLATE, POPUP_TIMEOUT, MATCH_THRESHOLD, USE_SEARCH
+            )
+            if match is not None:
+                return match
+            if attempt < USE_ATTEMPTS:
+                ctx.log(
+                    f"'사용하기' 버튼이 아직 안 보입니다 ({attempt}/{USE_ATTEMPTS}). "
+                    f"{USE_RETRY_INTERVAL:.0f}초 뒤 다시 확인합니다."
+                )
+                if not ctx.sleep(USE_RETRY_INTERVAL):
+                    return None
+        return None
