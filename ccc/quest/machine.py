@@ -418,9 +418,13 @@ class QuestMachine:
         ("쿠키 뽑기 10회 하기" / "펫 뽑기 10회 하기") 서로를 가로챈다.
         전부 점수를 매겨 1등을 고르고, 2등과 충분히 벌어졌을 때만 확정한다.
         """
+        if self._panel_too_narrow(ctx):
+            # 들어가지도 못한 템플릿이 있으면 남은 것들끼리의 1등은 믿을 수 없다.
+            # 정답이 재 보지도 못한 쪽일 수 있다.
+            return None
+
         scored = self._score_all(ctx)
         if not scored:
-            self._warn_if_panel_too_narrow(ctx)
             return None
 
         scored.sort(key=lambda item: item[0], reverse=True)
@@ -437,17 +441,22 @@ class QuestMachine:
         log.debug("퀘스트 판별 점수: %s", [(d.label, round(s, 3)) for s, d in scored])
         return best
 
-    def _warn_if_panel_too_narrow(self, ctx: Context) -> None:
-        """퀘스트창 영역이 이름 템플릿보다 좁으면 알린다.
+    def _panel_too_narrow(self, ctx: Context) -> bool:
+        """퀘스트창 영역에 못 들어가는 이름 템플릿이 있는지.
 
         탐색 영역이 템플릿보다 작으면 매칭은 시도조차 되지 않고 그대로 0 점이
-        된다. 화면에 퀘스트가 멀쩡히 떠 있는데 전부 0 점이면 십중팔구 이 경우다.
-        영역 보정에서 '퀘스트창' 을 색 표본 자리처럼 좁게 잡으면 이렇게 된다.
+        된다. 영역 보정에서 '퀘스트창' 을 색 표본 자리처럼 좁게 잡으면 이렇게
+        된다(실측 53px, 오븐 템플릿은 95px).
 
-        한 번만 알린다. 판별은 매 tick 도는 자리라 매번 찍으면 로그가 묻힌다.
+        이때 남은 작은 템플릿들끼리 1등을 뽑으면 **엉뚱한 퀘스트로 확정된다.**
+        실측: 장비 뽑기 화면인데 오븐(95px)·상자(91px)는 0 점으로 빠지고
+        펫(37px)만 0.54 로 남아 펫 뽑기로 오인식됐다. 그래서 이 경우에는
+        아예 판별하지 않는다 — 정답이 재 보지도 못한 쪽일 수 있다.
+
+        알림은 한 번만 찍는다. 판별은 매 tick 도는 자리다.
         """
-        if self._warned_small_panel or ctx.frame is None:
-            return
+        if ctx.frame is None:
+            return False
         width = round(self._panel_area.w * ctx.frame.shape[1])
         too_wide = []
         for definition in self._registry.definitions:
@@ -459,13 +468,17 @@ class QuestMachine:
                 if template.image.shape[1] > width:
                     too_wide.append(f"{name}({template.image.shape[1]}px)")
         if not too_wide:
-            return
-        self._warned_small_panel = True
-        ctx.log(
-            f"⚠ 퀘스트창 영역이 {width}px 로 좁아 템플릿이 들어가지 않습니다: "
-            f"{', '.join(too_wide)}. 설정 탭의 '영역 보정' 에서 '퀘스트창' 을 "
-            "이름 글자가 다 들어가도록 넓게 잡거나 '기본값으로' 를 누르세요."
-        )
+            return False
+        if not self._warned_small_panel:
+            self._warned_small_panel = True
+            ctx.log(
+                f"⚠ 퀘스트창 영역이 {width}px 로 좁아 템플릿이 들어가지 않습니다: "
+                f"{', '.join(too_wide)}. 남은 것들만으로 고르면 엉뚱한 퀘스트로 "
+                "확정되므로 판별을 멈춥니다. 설정 탭의 '영역 보정' 에서 "
+                "'퀘스트창' 을 이름 글자가 다 들어가도록 넓게 잡거나 "
+                "'기본값으로' 를 누르세요."
+            )
+        return True
 
     def _score_all(self, ctx: Context) -> list[tuple[float, QuestDefinition]]:
         scored: list[tuple[float, QuestDefinition]] = []
