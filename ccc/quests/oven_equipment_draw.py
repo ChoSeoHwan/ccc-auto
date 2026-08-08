@@ -29,7 +29,10 @@
 
 from __future__ import annotations
 
+import logging
+
 from .. import anchors as anchor_names
+from ..assets import load as load_asset
 from ..config import LOCAL_DIR
 from ..context import Context
 from ..geometry import NormRect
@@ -39,7 +42,9 @@ from ..quest.navigator import BattleScreenNavigator
 from ..quest.panel import QuestPanelReader, panel_visible
 from ..quest.states import PanelState
 from ..templates_spec import NUMBER_TIP, SIZE_TIP, TemplateSpec
-from ..vision import TemplateError
+from ..vision import TemplateError, find
+
+log = logging.getLogger(__name__)
 
 AUTO_TEMPLATE = "oven_auto"
 START_TEMPLATE = "oven_auto_start"
@@ -61,20 +66,19 @@ START_THRESHOLD = 0.85
 LEVELUP_THRESHOLD = 0.80
 GROW_THRESHOLD = 0.80
 
-LEVELUP_SEARCH = NormRect(0.05, 0.80, 0.90, 0.15)
-"""'레벨업' 버튼을 찾을 범위. 확인창의 버튼 줄이다.
+LEVELUP_SEARCH = NormRect(0.45, 0.80, 0.55, 0.12)
+"""'레벨업' 버튼을 찾을 범위.
 
-**잠정값이다.** 아직 이 화면의 프레임을 실측하지 못해 스크린샷에서 눈대중으로
-잡았다. 넉넉히 잡아 두었으므로 못 찾을 일은 적고, 누를 자리는 이 범위가 아니라
-템플릿을 찾은 위치에서 나온다 — 바로 옆이 '그냥 열기' 라 좌표를 짐작해 누르면 안 된다.
-프레임이 생기면 `tools/dev.py locate orange --area ...` 로 다시 재라.
+실측: 확인창의 레벨업 버튼은 게임 좌표 (0.615, 0.865) 에 0.150x0.031 크기로 앉는다.
+그 자리를 넉넉히 감싼다. 왼쪽 절반은 일부러 뺐다 — 거기 '그냥 열기' 가 있고,
+둘을 한 범위에 넣으면 잘못 걸릴 여지를 만든다.
 """
 
 GROW_SEARCH = None
-"""'오븐 성장' 버튼을 찾을 범위. 어디에 뜨는지 아직 실측하지 못해 화면 전체를 본다.
+"""'오븐 성장' 버튼을 찾을 범위. 그 화면 스크린샷이 없어 위치를 재지 못했다.
 
-전체 탐색은 범위를 준 것보다 20배 비싸다(166ms 대 6~9ms). 이 확인창이 뜬 뒤에만
-잠깐 도는 경로라 지금은 감당되지만, 실측되면 범위를 채워 넣어라.
+전체 탐색은 범위를 준 것보다 20배 비싸다(166ms 대 6~9ms). 확인창을 만난 뒤에만
+잠깐 도는 경로라 감당되지만, 위치가 실측되면 범위를 채워 넣어라.
 """
 
 LEVELUP_GROW_TIMEOUT = 5.0
@@ -145,23 +149,6 @@ class OvenEquipmentDraw(QuestDefinition):
             where="Auto 버튼을 누르면 뜨는 '자동 열기' 팝업",
             what="주황색 '시작' 버튼 전체",
             default_area=NormRect(0.3315, 0.8552, 0.3352, 0.0526),
-        ),
-        TemplateSpec(
-            name=LEVELUP_TEMPLATE,
-            label="오븐 레벨업 확인창의 레벨업 버튼",
-            where="'시작' 을 눌렀을 때 가끔 뜨는 '오븐을 레벨업 할 수 있습니다' 확인창",
-            what="오른쪽 주황색 '레벨업' 버튼",
-            tips=(
-                "왼쪽 청록색 '그냥 열기' 는 넣지 마라. 둘이 붙어 있어 섞이면 잘못 눌린다.",
-                "가끔만 뜨는 창이다. 못 만나면 비워 둬도 되고, 그동안은 진행 불가로 넘어간다.",
-            ),
-        ),
-        TemplateSpec(
-            name=GROW_TEMPLATE,
-            label="오븐 성장 버튼",
-            where="'레벨업' 을 누르면 열리는 오븐 성장 화면",
-            what="초록색 '오븐 성장' 버튼",
-            tips=("레벨업 확인창과 한 묶음이다. 둘 다 있어야 자동으로 넘어간다.",),
         ),
     ]
 
@@ -241,12 +228,13 @@ class OvenEquipmentDraw(QuestDefinition):
         두 버튼 다 **찾은 자리를** 누른다. 확인창은 '그냥 열기' 가 바로 옆에
         붙어 있어서, 좌표를 짐작해 누르면 원치 않는 쪽이 눌린다.
 
-        템플릿이 아직 없으면 조용히 False 를 돌려준다. 가끔만 뜨는 창이라
-        템플릿을 못 뜬 사람이 이 경로 때문에 막히면 안 된다.
+        두 버튼은 저장소에 함께 든 조각(``ccc/assets/``)으로 찾는다. 몇 시간에
+        한 번 스쳐 가는 창이라 사용자가 그 순간을 붙잡아 캡처하기 어렵다.
         """
         try:
-            offer = ctx.find(LEVELUP_TEMPLATE, LEVELUP_THRESHOLD, LEVELUP_SEARCH)
-        except TemplateError:
+            offer = find(ctx.frame, load_asset(LEVELUP_TEMPLATE), LEVELUP_THRESHOLD, LEVELUP_SEARCH)
+        except (FileNotFoundError, KeyError) as exc:
+            log.warning("번들 조각을 쓸 수 없습니다: %s", exc)
             return False
         if offer is None:
             return False
@@ -256,14 +244,7 @@ class OvenEquipmentDraw(QuestDefinition):
         ctx.tap_match(offer)
         self._keep_shot(ctx, "2-레벨업-누른-뒤", settle=True)
 
-        try:
-            grow = ctx.wait_for_template(
-                GROW_TEMPLATE, LEVELUP_GROW_TIMEOUT, GROW_THRESHOLD, GROW_SEARCH
-            )
-        except TemplateError as exc:
-            ctx.log(f"'오븐 성장' 버튼을 확인할 수 없습니다: {exc}")
-            return True
-
+        grow = self._wait_for_grow(ctx)
         if grow is None:
             ctx.log("'오븐 성장' 버튼을 찾지 못했습니다. 확인부터 다시 봅니다.")
             return True
@@ -272,6 +253,26 @@ class OvenEquipmentDraw(QuestDefinition):
         ctx.tap_match(grow)
         self._keep_shot(ctx, "3-오븐성장-누른-뒤", settle=True)
         return True
+
+    def _wait_for_grow(self, ctx: Context):
+        """'오븐 성장' 버튼이 뜨기를 기다린다. 번들 조각으로 찾는다."""
+        try:
+            asset = load_asset(GROW_TEMPLATE)
+        except (FileNotFoundError, KeyError) as exc:
+            log.warning("번들 조각을 쓸 수 없습니다: %s", exc)
+            return None
+
+        found = []
+
+        def appeared(frame) -> bool:
+            match = find(frame, asset, GROW_THRESHOLD, GROW_SEARCH)
+            if match is None:
+                return False
+            found.append(match)
+            return True
+
+        ctx.wait_until(appeared, LEVELUP_GROW_TIMEOUT)
+        return found[0] if found else None
 
     def _keep_shot(self, ctx: Context, name: str, settle: bool = False) -> None:
         """레벨업 과정의 화면을 남긴다.
