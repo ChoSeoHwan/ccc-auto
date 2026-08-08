@@ -30,9 +30,11 @@
 from __future__ import annotations
 
 from .. import anchors as anchor_names
+from ..config import LOCAL_DIR
 from ..context import Context
 from ..geometry import NormRect
 from ..quest.definition import QuestDefinition, StepResult
+from ..quest.diagnostics import save_frame
 from ..quest.navigator import BattleScreenNavigator
 from ..quest.panel import QuestPanelReader, panel_visible
 from ..quest.states import PanelState
@@ -77,6 +79,22 @@ GROW_SEARCH = None
 
 LEVELUP_GROW_TIMEOUT = 5.0
 """'레벨업' 을 누르고 '오븐 성장' 버튼이 뜨기까지 기다릴 상한."""
+
+LEVELUP_SHOT_DIR = LOCAL_DIR / "oven_level_up"
+"""레벨업 확인창을 만났을 때의 화면을 모아 두는 곳.
+
+가끔만 뜨는 화면이라 사람이 다시 만들어 내기 어렵다. 지나갈 때마다 세 장
+(확인창 / 레벨업 누른 뒤 / 오븐 성장 누른 뒤)을 남겨서, 나중에 여기서
+템플릿을 뜨고 좌표를 잴 수 있게 한다.
+"""
+
+LEVELUP_SHOT_DELAY = 1.2
+"""화면이 바뀌기를 기다렸다가 찍는 시간.
+
+여기만은 고정 대기를 쓴다. 다음 화면이 어떻게 생겼는지 몰라서 기다릴 조건을
+세울 수가 없다 — 그걸 알아내려고 찍는 것이다. 진단 경로에만 있고 정상 흐름의
+속도에는 영향을 주지 않는다.
+"""
 
 POPUP_TIMEOUT = 5.0
 """Auto 를 누르고 '자동 열기' 팝업이 뜨기까지 기다릴 상한."""
@@ -233,8 +251,10 @@ class OvenEquipmentDraw(QuestDefinition):
         if offer is None:
             return False
 
+        self._keep_shot(ctx, "1-확인창")
         ctx.log(f"오븐 레벨업 확인창 감지 (일치도 {offer.score:.2f}) → '레벨업' 클릭")
         ctx.tap_match(offer)
+        self._keep_shot(ctx, "2-레벨업-누른-뒤", settle=True)
 
         try:
             grow = ctx.wait_for_template(
@@ -250,7 +270,24 @@ class OvenEquipmentDraw(QuestDefinition):
 
         ctx.log(f"'오븐 성장' 클릭 (일치도 {grow.score:.2f})")
         ctx.tap_match(grow)
+        self._keep_shot(ctx, "3-오븐성장-누른-뒤", settle=True)
         return True
+
+    def _keep_shot(self, ctx: Context, name: str, settle: bool = False) -> None:
+        """레벨업 과정의 화면을 남긴다.
+
+        가끔만 지나가는 길이라, 지날 때 찍어 두지 않으면 나중에 무엇을 보고
+        무엇을 눌러야 하는지 잴 수가 없다.
+        """
+        if settle:
+            # 화면이 바뀔 틈을 준다. 다음 화면 모습을 모르니 기다릴 조건을
+            # 세울 수 없어 여기서만 고정 대기를 쓴다.
+            if not ctx.sleep(LEVELUP_SHOT_DELAY):
+                return
+            ctx.refresh()
+        saved = save_frame(ctx.frame, LEVELUP_SHOT_DIR, name)
+        if saved:
+            ctx.log(f"화면 저장: {saved}")
 
     def _press_start(self, ctx: Context) -> StepResult:
         try:

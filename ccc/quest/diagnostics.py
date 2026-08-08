@@ -47,6 +47,24 @@ class DetectionReport:
         ]
 
 
+def save_frame(frame: np.ndarray, directory: Path, name: str) -> Path | None:
+    """화면 한 장을 지정한 폴더에 통째로 남긴다.
+
+    ``save_snapshot`` 과 달리 영역 확대본을 만들지 않는다. 어디를 봐야 할지
+    아직 모르는 화면을 모을 때 쓴다 — 자를 자리를 알면 이미 템플릿이 있다.
+    """
+    import cv2
+
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{name}.png"
+        cv2.imwrite(str(path), frame)
+        return path
+    except Exception:
+        log.exception("화면 저장 실패: %s", name)
+        return None
+
+
 def save_snapshot(frame: np.ndarray, area: NormRect, prefix: str) -> Path | None:
     """전체 화면과 해당 영역 확대본을 함께 저장하고 영역 파일 경로를 반환."""
     import cv2

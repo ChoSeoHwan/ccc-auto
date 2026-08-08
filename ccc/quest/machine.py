@@ -128,6 +128,7 @@ class QuestMachine:
         self._unknown_reads = 0
         self._unknown_quest_since: float | None = None
         self._unknown_rounds = 0
+        self._idle_requested = False
         self._last_notice = ""
 
     # ------------------------------------------------------------------
@@ -142,6 +143,7 @@ class QuestMachine:
 
     def start(self) -> None:
         """대기 상태에서 자동화를 시작한다."""
+        self._idle_requested = False
         self._failures = 0
         self._retries = 0
         self._unknown_reads = 0
@@ -152,6 +154,11 @@ class QuestMachine:
         self._enter(MainState.CHECK)
 
     def to_idle(self, reason: str = "") -> None:
+        # 이 메서드는 UI 스레드가 부른다. 그때 엔진 스레드는 quest.execute 안에서
+        # 버튼이 나타나기를 기다리는 중일 수 있고, 그게 끝나면 제 걸음을 마무리하며
+        # CHECK 로 되돌린다. 그러면 대기를 눌러도 자동화가 계속 돈다.
+        # 요청을 깃발로 남겨 두어, 진행 중이던 걸음이 상태를 되돌리지 못하게 한다.
+        self._idle_requested = True
         self._retries = 0
         self._unknown_reads = 0
         self._unknown_quest_since = None
@@ -444,6 +451,9 @@ class QuestMachine:
         self.to_idle(reason)
 
     def _enter(self, state: MainState, reason: str = "") -> None:
+        if self._idle_requested and state is not MainState.IDLE:
+            # 대기 요청이 들어온 뒤에는 진행 중이던 걸음이 상태를 되돌리지 못한다.
+            return
         if state is not self.state:
             log.info("상태 전이: %s → %s%s", self.state.value, state.value,
                      f" ({reason})" if reason else "")
