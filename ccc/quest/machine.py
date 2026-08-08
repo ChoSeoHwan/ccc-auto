@@ -26,6 +26,7 @@ from .navigator import BattleScreenNavigator
 from .panel import PanelReading, StablePanelReader
 from .registry import QuestRegistry
 from .states import MainState, PanelState, ProgressStep
+from ..vision import TemplateError
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +130,7 @@ class QuestMachine:
         self._unknown_quest_since: float | None = None
         self._unknown_rounds = 0
         self._idle_requested = False
+        self._warned_small_panel = False
         self._last_notice = ""
 
     # ------------------------------------------------------------------
@@ -144,6 +146,7 @@ class QuestMachine:
     def start(self) -> None:
         """대기 상태에서 자동화를 시작한다."""
         self._idle_requested = False
+        self._warned_small_panel = False
         self._failures = 0
         self._retries = 0
         self._unknown_reads = 0
@@ -417,6 +420,7 @@ class QuestMachine:
         """
         scored = self._score_all(ctx)
         if not scored:
+            self._warn_if_panel_too_narrow(ctx)
             return None
 
         scored.sort(key=lambda item: item[0], reverse=True)
@@ -432,6 +436,36 @@ class QuestMachine:
 
         log.debug("퀘스트 판별 점수: %s", [(d.label, round(s, 3)) for s, d in scored])
         return best
+
+    def _warn_if_panel_too_narrow(self, ctx: Context) -> None:
+        """퀘스트창 영역이 이름 템플릿보다 좁으면 알린다.
+
+        탐색 영역이 템플릿보다 작으면 매칭은 시도조차 되지 않고 그대로 0 점이
+        된다. 화면에 퀘스트가 멀쩡히 떠 있는데 전부 0 점이면 십중팔구 이 경우다.
+        영역 보정에서 '퀘스트창' 을 색 표본 자리처럼 좁게 잡으면 이렇게 된다.
+
+        한 번만 알린다. 판별은 매 tick 도는 자리라 매번 찍으면 로그가 묻힌다.
+        """
+        if self._warned_small_panel or ctx.frame is None:
+            return
+        width = round(self._panel_area.w * ctx.frame.shape[1])
+        too_wide = []
+        for definition in self._registry.definitions:
+            for name in definition.name_templates:
+                try:
+                    template = ctx.templates.load(name)
+                except TemplateError:
+                    continue
+                if template.image.shape[1] > width:
+                    too_wide.append(f"{name}({template.image.shape[1]}px)")
+        if not too_wide:
+            return
+        self._warned_small_panel = True
+        ctx.log(
+            f"⚠ 퀘스트창 영역이 {width}px 로 좁아 템플릿이 들어가지 않습니다: "
+            f"{', '.join(too_wide)}. 설정 탭의 '영역 보정' 에서 '퀘스트창' 을 "
+            "이름 글자가 다 들어가도록 넓게 잡거나 '기본값으로' 를 누르세요."
+        )
 
     def _score_all(self, ctx: Context) -> list[tuple[float, QuestDefinition]]:
         scored: list[tuple[float, QuestDefinition]] = []
