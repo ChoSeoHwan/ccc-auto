@@ -22,10 +22,12 @@ class PetDraw(TenDrawQuest):
     name_templates = ["quest_pet_draw"]
     draw_template = "gacha_pet_draw10"
 
+    template_group = "퀘스트 - 펫 뽑기"
+    setup_order = 30
     template_specs = [
         TemplateSpec(
             name="quest_pet_draw",
-            label="퀘스트 이름 · 펫 뽑기",
+            label="퀘스트 창",
             where="전투화면에 '펫 뽑기 N회 하기' 퀘스트가 회색으로 떠 있을 때",
             what="'펫 뽑기' 까지만. 'N회 하기' 는 자른다",
             tips=(

@@ -374,7 +374,7 @@ class ControlWindow(tk.Tk):
 
     def _open_setup(self) -> None:
         dialog = TemplateSetupDialog(
-            self, self.app.required_templates(), self.app.templates, self._capture_for
+            self, self.app.template_groups(), self.app.templates, self._capture_for
         )
         self.wait_window(dialog)
         self._render_setup_state()
@@ -387,7 +387,7 @@ class ControlWindow(tk.Tk):
         dialog = TemplateCaptureDialog(self, frame, self.app.templates, spec=spec)
         self.wait_window(dialog)
         if dialog.saved_name:
-            self._log(f"템플릿 저장됨: {spec.label} ({dialog.saved_name})")
+            self._log(f"템플릿 저장됨: {spec.title} ({dialog.saved_name})")
         return dialog.saved_name
 
     def _render_setup_state(self) -> None:

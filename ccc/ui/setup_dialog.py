@@ -18,21 +18,25 @@ _PAD = 10
 _WRAP = 540
 _MUTED = "#666"
 
+_GROUP_PREFIX = "그룹::"
+"""묶음 행의 iid 접두사. 템플릿 이름은 영문/숫자/밑줄/하이픈뿐이라 겹치지 않는다."""
+
 
 class TemplateSetupDialog(tk.Toplevel):
     def __init__(
         self,
         master: tk.Misc,
-        specs: list[TemplateSpec],
+        groups: list[tuple[str, list[TemplateSpec]]],
         store: TemplateStore,
         capture: Callable[[TemplateSpec], str | None],
     ):
         super().__init__(master)
         self.title("템플릿 설정")
         self.transient(master)
-        self.minsize(600, 460)
+        self.minsize(600, 520)
 
-        self.specs = specs
+        self.groups = groups
+        self.specs = [spec for _, specs in groups for spec in specs]
         self.store = store
         self._capture = capture
 
@@ -56,11 +60,13 @@ class TemplateSetupDialog(tk.Toplevel):
         body.pack(fill="both", expand=True)
 
         self.tree = ttk.Treeview(
-            body, columns=("state",), show="tree headings", selectmode="browse", height=10
+            body, columns=("state",), show="tree headings", selectmode="browse", height=14
         )
         self.tree.heading("#0", text="템플릿")
         self.tree.heading("state", text="상태")
+        self.tree.column("#0", width=320, stretch=True)
         self.tree.column("state", width=70, anchor="center", stretch=False)
+        self.tree.tag_configure("group", font=("Malgun Gothic", 10, "bold"))
         self.tree.pack(side="left", fill="both", expand=True)
 
         scroll = ttk.Scrollbar(body, command=self.tree.yview)
@@ -87,11 +93,25 @@ class TemplateSetupDialog(tk.Toplevel):
         selected = self.tree.selection()
 
         self.tree.delete(*self.tree.get_children())
-        for spec in self.specs:
-            done = spec.name in have
-            self.tree.insert(
-                "", "end", iid=spec.name, text=spec.label, values=("완료" if done else "필요")
+        for index, (group, specs) in enumerate(self.groups):
+            done_count = sum(1 for spec in specs if spec.name in have)
+            parent = self.tree.insert(
+                "",
+                "end",
+                iid=f"{_GROUP_PREFIX}{index}",
+                text=f"[{group}]",
+                values=(f"{done_count}/{len(specs)}",),
+                open=True,
+                tags=("group",),
             )
+            for spec in specs:
+                self.tree.insert(
+                    parent,
+                    "end",
+                    iid=spec.name,
+                    text=spec.label,
+                    values=("완료" if spec.name in have else "필요",),
+                )
 
         missing = [spec for spec in self.specs if spec.name not in have]
         self.status_var.set(
@@ -109,8 +129,9 @@ class TemplateSetupDialog(tk.Toplevel):
         self._show_guide()
 
     def _selected_spec(self) -> TemplateSpec | None:
+        """묶음 행을 고른 상태면 None. 그때는 캡처 버튼을 잠근다."""
         selection = self.tree.selection()
-        if not selection:
+        if not selection or selection[0].startswith(_GROUP_PREFIX):
             return None
         return next((s for s in self.specs if s.name == selection[0]), None)
 
@@ -145,7 +166,7 @@ class TemplateSetupDialog(tk.Toplevel):
         if spec is None:
             return
         if spec.name in self.store.names() and not messagebox.askyesno(
-            "다시 캡처", f"'{spec.label}' 은 이미 있습니다. 다시 뜰까요?", parent=self
+            "다시 캡처", f"'{spec.title}' 은 이미 있습니다. 다시 뜰까요?", parent=self
         ):
             return
 

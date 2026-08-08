@@ -18,10 +18,12 @@ class CookieDraw(TenDrawQuest):
     name_templates = ["quest_cookie_draw"]
     draw_template = "gacha_draw10"
 
+    template_group = "퀘스트 - 쿠키 뽑기"
+    setup_order = 20
     template_specs = [
         TemplateSpec(
             name="quest_cookie_draw",
-            label="퀘스트 이름 · 쿠키 뽑기",
+            label="퀘스트 창",
             where="전투화면에 '쿠키 뽑기 N회 하기' 퀘스트가 회색으로 떠 있을 때",
             what="'쿠키 뽑기' 까지만. 'N회 하기' 는 자른다",
             tips=(NUMBER_TIP, SIZE_TIP),

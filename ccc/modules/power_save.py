@@ -29,6 +29,7 @@ class ExitPowerSaveMode(AutomationModule):
     exclusive = True
     enabled_by_default = True
 
+    template_group = "절전모드"
     template_specs = [
         TemplateSpec(
             name=LABEL_TEMPLATE,

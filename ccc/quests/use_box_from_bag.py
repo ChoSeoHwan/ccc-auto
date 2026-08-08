@@ -51,10 +51,12 @@ class UseBoxFromBag(QuestDefinition):
     name = "가방에서 상자 사용하기"
     name_templates = ["quest_use_box"]
 
+    template_group = "퀘스트 - 상자 아이템 사용"
+    setup_order = 10
     template_specs = [
         TemplateSpec(
             name="quest_use_box",
-            label="퀘스트 이름 · 가방에서 상자 사용하기",
+            label="퀘스트 창",
             where="전투화면에 '가방에서 상자 N개 사용하기' 퀘스트가 회색으로 떠 있을 때",
             what="퀘스트 이름 두 줄을 함께",
             tips=(NUMBER_TIP, SIZE_TIP),
@@ -62,7 +64,7 @@ class UseBoxFromBag(QuestDefinition):
         ),
         TemplateSpec(
             name=BOX_TEMPLATE,
-            label="가방의 보물상자 아이콘",
+            label="가방 내 보물상자 아이콘",
             where="퀘스트창을 눌러 연 가방 UI",
             what="쓰려는 상자 아이콘 그림",
             tips=("칸 아래의 보유 개수 숫자는 빼고 그림만 잡는다. 개수가 줄면 안 맞는다.",),
@@ -70,7 +72,7 @@ class UseBoxFromBag(QuestDefinition):
         ),
         TemplateSpec(
             name=USE_TEMPLATE,
-            label="사용하기 버튼",
+            label="보물상자 사용하기 버튼",
             where="가방에서 상자를 누르면 뜨는 상세 팝업",
             what="주황색 '사용하기' 버튼 전체",
             default_area=NormRect(0.2565, 0.4177, 0.4852, 0.0531),

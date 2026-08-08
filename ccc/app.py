@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import TYPE_CHECKING, Callable
 
 import numpy as np
@@ -168,20 +169,36 @@ class AutomationApp:
     # ------------------------------------------------------------------
     # 템플릿
     # ------------------------------------------------------------------
+    def template_groups(self) -> list[tuple[str, list[TemplateSpec]]]:
+        """캡처 마법사에 보여 줄 순서대로 (묶음 이름, 그 묶음의 템플릿들).
+
+        모듈이 먼저(priority 순), 그 다음 퀘스트(setup_order 순)다. 같은 이름의
+        템플릿을 두 곳에서 선언하면 먼저 나온 쪽만 남는다.
+        """
+        owners: list = sorted(self.modules, key=lambda m: (m.priority, m.label))
+        owners += sorted(QuestRegistry().load(), key=lambda q: (q.setup_order, q.label))
+
+        groups: list[tuple[str, list[TemplateSpec]]] = []
+        seen: set[str] = set()
+        for owner in owners:
+            name = owner.template_group or owner.label
+            specs = []
+            for spec in owner.template_specs:
+                if spec.name in seen:
+                    continue
+                seen.add(spec.name)
+                specs.append(replace(spec, group=name))
+            if specs:
+                groups.append((name, specs))
+        return groups
+
     def required_templates(self) -> list[TemplateSpec]:
         """켜져 있는 모듈과 등록된 퀘스트가 필요로 하는 템플릿 전부.
 
         게임 화면 이미지는 저장소에 없으므로 각자 자기 화면에서 떠야 한다.
         캡처 마법사가 이 목록을 따라간다.
         """
-        specs: dict[str, TemplateSpec] = {}
-        for module in self.modules:
-            for spec in module.template_specs:
-                specs.setdefault(spec.name, spec)
-        for quest in QuestRegistry().load().copy():
-            for spec in quest.template_specs:
-                specs.setdefault(spec.name, spec)
-        return list(specs.values())
+        return [spec for _, specs in self.template_groups() for spec in specs]
 
     def missing_templates(self) -> list[TemplateSpec]:
         have = set(self.templates.names())

@@ -70,7 +70,7 @@ class TemplateCaptureDialog(tk.Toplevel):
             return
 
         ttk.Label(
-            box, text=self.spec.label, font=("Malgun Gothic", 11, "bold"), justify="left"
+            box, text=self.spec.title, font=("Malgun Gothic", 11, "bold"), justify="left"
         ).pack(anchor="w")
         for line in self.spec.guide_lines():
             ttk.Label(

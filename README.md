@@ -193,10 +193,12 @@ class 출석보상(QuestDefinition):
     name = "출석 보상 받기"
     name_templates = ["quest_daily"]
 
+    template_group = "퀘스트 - 출석 보상"   # 템플릿 설정에서 묶일 이름
+    setup_order = 50                        # 목록에서의 순서 (작을수록 위)
     template_specs = [
         TemplateSpec(
             name="quest_daily",
-            label="퀘스트 이름 · 출석 보상",
+            label="퀘스트 창",
             where="전투화면에 이 퀘스트가 회색으로 떠 있을 때",
             what="퀘스트 이름 글자 줄",
             tips=(NUMBER_TIP, SIZE_TIP),          # 한 줄에 하나씩 표시된다
@@ -220,6 +222,8 @@ class 출석보상(QuestDefinition):
 - `template_specs` 를 적으면 캡처 마법사가 사용자를 안내한다. 안 적으면 목록에 안 나온다.
 - `default_area` 를 적어 두면 마법사가 그 자리를 미리 잡아 준다. 사용자는 맞는지 보고
   그대로 저장하거나 조금만 끌어 고치면 된다. `python tools/dev.py crop` 으로 값을 잡는다.
+- 템플릿 설정 목록은 `template_group` 으로 묶이고 `setup_order` 로 정렬된다. 모듈이 먼저,
+  그 다음 퀘스트다. `label` 은 묶음 안에서만 구별되면 되므로 짧게 적는다.
 - 만든 뒤 `python tools/dev.py identify` 로 **다른 퀘스트와 점수 차이가 0.08 이상 나는지**
   확인한다. 이름이 비슷한 퀘스트가 있으면 여기서 드러난다.
 

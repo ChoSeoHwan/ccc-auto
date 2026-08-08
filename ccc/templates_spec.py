@@ -39,6 +39,13 @@ class TemplateSpec:
     tips: tuple[str, ...] = ()
     """놓치기 쉬운 주의사항. 하나씩 따로 적는다 — 화면에 한 줄씩 나눠 띄운다."""
 
+    group: str = ""
+    """캡처 마법사에서 묶어 보여 줄 이름.
+
+    선언할 때는 비워 둔다. 묶음 이름은 이 템플릿을 요구하는 모듈/퀘스트의
+    ``template_group`` 에 적고, ``AutomationApp`` 이 목록을 만들면서 채운다.
+    """
+
     default_area: NormRect | None = None
     """미리 잡아 둘 영역. 마법사가 이 자리를 기본 선택으로 띄운다.
 
@@ -50,8 +57,13 @@ class TemplateSpec:
         """캡처 화면에 한 줄씩 띄울 안내."""
         return [f"화면 · {self.where}", f"대상 · {self.what}", *(f"주의 · {t}" for t in self.tips)]
 
+    @property
+    def title(self) -> str:
+        """묶음까지 붙인 이름. 여러 퀘스트가 '퀘스트 창' 처럼 같은 label 을 쓴다."""
+        return f"[{self.group}] {self.label}" if self.group else self.label
+
     def describe(self) -> str:
-        return "\n".join([f"[{self.label}]  ({self.name})", *self.guide_lines()])
+        return "\n".join([f"{self.title}  ({self.name})", *self.guide_lines()])
 
 
 NUMBER_TIP = "숫자와 퀘스트 번호는 빼고 잡는다 (횟수가 바뀌어도 걸리도록)."

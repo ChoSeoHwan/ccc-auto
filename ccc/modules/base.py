@@ -50,6 +50,9 @@ class AutomationModule(abc.ABC):
     template_specs: list[TemplateSpec] = []
     """이 모듈이 필요로 하는 템플릿과 그 캡처 방법. 캡처 마법사가 읽는다."""
 
+    template_group: str = ""
+    """캡처 마법사에서 이 모듈의 템플릿을 묶어 보여 줄 이름. 비우면 ``label``."""
+
     # ------------------------------------------------------------------
     @property
     def key(self) -> str:

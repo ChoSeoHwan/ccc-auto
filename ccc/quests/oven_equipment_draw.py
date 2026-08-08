@@ -70,10 +70,12 @@ class OvenEquipmentDraw(QuestDefinition):
     name = "오븐에서 장비 뽑기"
     name_templates = ["quest_oven_draw"]
 
+    template_group = "퀘스트 - 장비 뽑기"
+    setup_order = 40
     template_specs = [
         TemplateSpec(
             name="quest_oven_draw",
-            label="퀘스트 이름 · 오븐에서 장비 뽑기",
+            label="퀘스트 창",
             where="전투화면에 '오븐에서 장비 뽑기 N번' 퀘스트가 회색으로 떠 있을 때",
             what="퀘스트 이름 글자 줄",
             tips=(NUMBER_TIP, SIZE_TIP),
@@ -81,7 +83,7 @@ class OvenEquipmentDraw(QuestDefinition):
         ),
         TemplateSpec(
             name=AUTO_TEMPLATE,
-            label="오븐 Auto 버튼",
+            label="오븐 auto 버튼",
             where="전투화면 아래쪽 '플레이트 강화' 의 오븐 모형",
             what="오븐 왼쪽 아래의 청록색 'Auto' 버튼",
             tips=("꺼져 있는 상태를 잡는다. 돌고 있으면 노란색이라 걸리지 않는다.",),
@@ -89,7 +91,7 @@ class OvenEquipmentDraw(QuestDefinition):
         ),
         TemplateSpec(
             name=START_TEMPLATE,
-            label="자동 열기 시작 버튼",
+            label="오븐 auto 내 시작 버튼",
             where="Auto 버튼을 누르면 뜨는 '자동 열기' 팝업",
             what="주황색 '시작' 버튼 전체",
             default_area=NormRect(0.3315, 0.8552, 0.3352, 0.0526),

@@ -63,7 +63,7 @@ def run_check(app: AutomationApp) -> int:
     missing = app.missing_templates()
     print(f"[정보] 템플릿 {len(required) - len(missing)}/{len(required)}개 준비됨")
     for spec in missing:
-        print(f"[필요] {spec.label} ({spec.name}) — {spec.where}")
+        print(f"[필요] {spec.title} ({spec.name}) — {spec.where}")
     if missing:
         print("[안내] 컨트롤 창 > 설정 > '템플릿 설정' 에서 하나씩 캡처하세요.")
     return 0
