@@ -17,6 +17,10 @@
 '아이템이 부족합니다' 안내가 뜬다. 이 팝업에는 X 가 있어서 빈 곳 탭으로는
 닫히지 않는다. 3단계에서 X 가 보이면 두드리기를 멈추고 진행 불가로 알린다.
 
+**오븐을 올릴 수 있을 때.** '시작' 을 누르면 가끔 "오븐을 레벨업 할 수 있습니다"
+확인창이 뜬다. 이때는 레벨업 → 오븐 성장 순으로 누르고 퀘스트확인부터 다시 밟는다.
+뽑기는 이번 판에 돌지 않지만, 오븐이 올라가면 같은 창이 다시 뜨지 않는다.
+
 **Auto 버튼이 안 보이는 경우.** 이미 돌고 있으면 버튼이 노란색으로 바뀌고, 장비
 자동 분해 팝업까지 겹쳐서 그 상태를 알아보기가 어렵다. 그래서 켜진 버튼을 따로
 알아보려 하지 않는다. 청록색 버튼이 다시 보일 때까지 기다리기만 하고, 30초 안에
@@ -37,6 +41,8 @@ from ..vision import TemplateError
 
 AUTO_TEMPLATE = "oven_auto"
 START_TEMPLATE = "oven_auto_start"
+LEVELUP_TEMPLATE = "oven_levelup"
+GROW_TEMPLATE = "oven_grow"
 
 AUTO_SEARCH = NormRect(0.18, 0.82, 0.40, 0.12)
 """Auto 버튼을 찾을 범위. 오븐 왼쪽 아래를 넉넉히 덮는다.
@@ -50,6 +56,27 @@ START_SEARCH = NormRect(0.20, 0.82, 0.60, 0.10)
 
 AUTO_THRESHOLD = 0.80
 START_THRESHOLD = 0.85
+LEVELUP_THRESHOLD = 0.80
+GROW_THRESHOLD = 0.80
+
+LEVELUP_SEARCH = NormRect(0.05, 0.80, 0.90, 0.15)
+"""'레벨업' 버튼을 찾을 범위. 확인창의 버튼 줄이다.
+
+**잠정값이다.** 아직 이 화면의 프레임을 실측하지 못해 스크린샷에서 눈대중으로
+잡았다. 넉넉히 잡아 두었으므로 못 찾을 일은 적고, 누를 자리는 이 범위가 아니라
+템플릿을 찾은 위치에서 나온다 — 바로 옆이 '그냥 열기' 라 좌표를 짐작해 누르면 안 된다.
+프레임이 생기면 `tools/dev.py locate orange --area ...` 로 다시 재라.
+"""
+
+GROW_SEARCH = None
+"""'오븐 성장' 버튼을 찾을 범위. 어디에 뜨는지 아직 실측하지 못해 화면 전체를 본다.
+
+전체 탐색은 범위를 준 것보다 20배 비싸다(166ms 대 6~9ms). 이 확인창이 뜬 뒤에만
+잠깐 도는 경로라 지금은 감당되지만, 실측되면 범위를 채워 넣어라.
+"""
+
+LEVELUP_GROW_TIMEOUT = 5.0
+"""'레벨업' 을 누르고 '오븐 성장' 버튼이 뜨기까지 기다릴 상한."""
 
 POPUP_TIMEOUT = 5.0
 """Auto 를 누르고 '자동 열기' 팝업이 뜨기까지 기다릴 상한."""
@@ -100,6 +127,23 @@ class OvenEquipmentDraw(QuestDefinition):
             where="Auto 버튼을 누르면 뜨는 '자동 열기' 팝업",
             what="주황색 '시작' 버튼 전체",
             default_area=NormRect(0.3315, 0.8552, 0.3352, 0.0526),
+        ),
+        TemplateSpec(
+            name=LEVELUP_TEMPLATE,
+            label="오븐 레벨업 확인창의 레벨업 버튼",
+            where="'시작' 을 눌렀을 때 가끔 뜨는 '오븐을 레벨업 할 수 있습니다' 확인창",
+            what="오른쪽 주황색 '레벨업' 버튼",
+            tips=(
+                "왼쪽 청록색 '그냥 열기' 는 넣지 마라. 둘이 붙어 있어 섞이면 잘못 눌린다.",
+                "가끔만 뜨는 창이다. 못 만나면 비워 둬도 되고, 그동안은 진행 불가로 넘어간다.",
+            ),
+        ),
+        TemplateSpec(
+            name=GROW_TEMPLATE,
+            label="오븐 성장 버튼",
+            where="'레벨업' 을 누르면 열리는 오븐 성장 화면",
+            what="초록색 '오븐 성장' 버튼",
+            tips=("레벨업 확인창과 한 묶음이다. 둘 다 있어야 자동으로 넘어간다.",),
         ),
     ]
 
@@ -169,6 +213,45 @@ class OvenEquipmentDraw(QuestDefinition):
         ctx.wait_until(settled, AUTO_WAIT_TIMEOUT, interval=AUTO_POLL)
         return (found[0] if found else None), bool(done)
 
+    def _take_levelup_offer(self, ctx: Context) -> bool:
+        """'오븐을 레벨업 할 수 있습니다' 확인창이면 레벨업까지 마치고 True.
+
+        레벨업 → 오븐 성장 순으로 누른다. 뽑기는 이번 판에 돌지 않으므로
+        여기서 끝내고 퀘스트확인부터 다시 밟게 한다. 오븐이 올라간 뒤에는
+        같은 창이 다시 뜨지 않으니 다음 판에서 정상적으로 진행된다.
+
+        두 버튼 다 **찾은 자리를** 누른다. 확인창은 '그냥 열기' 가 바로 옆에
+        붙어 있어서, 좌표를 짐작해 누르면 원치 않는 쪽이 눌린다.
+
+        템플릿이 아직 없으면 조용히 False 를 돌려준다. 가끔만 뜨는 창이라
+        템플릿을 못 뜬 사람이 이 경로 때문에 막히면 안 된다.
+        """
+        try:
+            offer = ctx.find(LEVELUP_TEMPLATE, LEVELUP_THRESHOLD, LEVELUP_SEARCH)
+        except TemplateError:
+            return False
+        if offer is None:
+            return False
+
+        ctx.log(f"오븐 레벨업 확인창 감지 (일치도 {offer.score:.2f}) → '레벨업' 클릭")
+        ctx.tap_match(offer)
+
+        try:
+            grow = ctx.wait_for_template(
+                GROW_TEMPLATE, LEVELUP_GROW_TIMEOUT, GROW_THRESHOLD, GROW_SEARCH
+            )
+        except TemplateError as exc:
+            ctx.log(f"'오븐 성장' 버튼을 확인할 수 없습니다: {exc}")
+            return True
+
+        if grow is None:
+            ctx.log("'오븐 성장' 버튼을 찾지 못했습니다. 확인부터 다시 봅니다.")
+            return True
+
+        ctx.log(f"'오븐 성장' 클릭 (일치도 {grow.score:.2f})")
+        ctx.tap_match(grow)
+        return True
+
     def _press_start(self, ctx: Context) -> StepResult:
         try:
             match = ctx.wait_for_template(
@@ -210,6 +293,11 @@ class OvenEquipmentDraw(QuestDefinition):
             if panel_back(ctx.frame):
                 if attempt:
                     ctx.log(f"결과 팝업 정리 완료 ({attempt}회 탭)")
+                return StepResult.ok()
+
+            # 레벨업 확인창 검사가 X 검사보다 먼저다. 이 창에도 하단 X 가 보여서
+            # 순서를 바꾸면 레벨업을 해 보지도 못하고 진행 불가로 빠진다.
+            if self._take_levelup_offer(ctx):
                 return StepResult.ok()
 
             # 첫 판은 봐 준다. 시작 직후에는 아직 연출이 돌고 있을 수 있다.
