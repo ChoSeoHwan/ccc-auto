@@ -124,10 +124,12 @@ class Engine:
 
         last_run: dict[str, float] = {}
         errors = 0
+        adb_errors = 0
         interval = 1.0 / self._fps
 
         while not self._stop.is_set():
             tick_start = time.monotonic()
+            adb_failed = False
 
             try:
                 ctx.set_frame(backend.grab())
@@ -158,8 +160,14 @@ class Engine:
                     module.run(ctx)
                     last_run[module.key] = time.monotonic()
                 except AdbError as exc:
-                    self._emit(f"[{module.label}] ADB 오류: {exc}")
+                    adb_errors += 1
+                    adb_failed = True
+                    self._emit(
+                        f"[{module.label}] ADB 오류"
+                        f"({adb_errors}/{_MAX_CONSECUTIVE_ERRORS}): {exc}"
+                    )
                     last_run[module.key] = time.monotonic()
+                    break  # adb 가 죽은 상태에서 남은 모듈을 돌려 봐야 같은 오류만 쌓인다
                 except Exception as exc:
                     log.exception("모듈 실행 실패: %s", module.label)
                     self._emit(f"[{module.label}] 오류: {exc}")
@@ -167,6 +175,27 @@ class Engine:
                 else:
                     if module.exclusive:
                         break
+
+            if adb_failed:
+                if adb_errors >= _MAX_CONSECUTIVE_ERRORS:
+                    self._emit(
+                        "ADB 명령이 계속 실패해 자동화를 멈춥니다. "
+                        "BlueStacks 가 켜져 있는지, 설정 > 고급에서 ADB 가 켜져 있는지 확인하세요."
+                    )
+                    break
+                # 화면 캡처는 adb 를 거치지 않으므로 연결이 끊겨도 루프는 계속 돈다.
+                # 재연결을 한 번 시도하고 잠시 쉰 뒤 다시 본다.
+                try:
+                    self.client.refresh_device()
+                    self._emit("ADB 재연결 성공.")
+                    adb_errors = 0
+                except AdbError as exc:
+                    self._emit(f"ADB 재연결 실패: {exc}")
+                if self._stop.wait(1.0):
+                    break
+                continue
+
+            adb_errors = 0
 
             elapsed = time.monotonic() - tick_start
             if self._stop.wait(max(0.0, interval - elapsed)):

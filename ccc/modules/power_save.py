@@ -45,7 +45,7 @@ class ExitPowerSaveMode(AutomationModule):
     def check(self, ctx: Context) -> bool:
         threshold = ctx.option("threshold", MATCH_THRESHOLD)
         try:
-            return ctx.find_text(LABEçL_TEMPLATE, threshold, SEARCH_AREA) is not None
+            return ctx.find_text(LABEL_TEMPLATE, threshold, SEARCH_AREA) is not None
         except TemplateError as exc:
             if not self._warned:
                 ctx.log(f"절전 모드를 감지할 수 없습니다: {exc}")
