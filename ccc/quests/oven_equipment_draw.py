@@ -13,6 +13,10 @@
 3단계 팝업은 '장착 / 판매' 버튼을 갖고 있지만 어느 쪽도 누르지 않는다.
 빈 곳을 누르면 아무 선택 없이 닫히고 장비는 가방에 남는다.
 
+**재료가 모자랄 때.** 행운반죽이 없으면 '시작' 을 눌러도 뽑기가 돌지 않고
+'아이템이 부족합니다' 안내가 뜬다. 이 팝업에는 X 가 있어서 빈 곳 탭으로는
+닫히지 않는다. 3단계에서 X 가 보이면 두드리기를 멈추고 진행 불가로 알린다.
+
 **Auto 버튼이 안 보이는 경우.** 이미 돌고 있으면 버튼이 노란색으로 바뀌고, 장비
 자동 분해 팝업까지 겹쳐서 그 상태를 알아보기가 어렵다. 그래서 켜진 버튼을 따로
 알아보려 하지 않는다. 청록색 버튼이 다시 보일 때까지 기다리기만 하고, 30초 안에
@@ -25,6 +29,7 @@ from .. import anchors as anchor_names
 from ..context import Context
 from ..geometry import NormRect
 from ..quest.definition import QuestDefinition, StepResult
+from ..quest.navigator import BattleScreenNavigator
 from ..quest.panel import QuestPanelReader, panel_visible
 from ..quest.states import PanelState
 from ..templates_spec import NUMBER_TIP, SIZE_TIP, TemplateSpec
@@ -103,8 +108,7 @@ class OvenEquipmentDraw(QuestDefinition):
         if not result.success:
             return result
 
-        self._dismiss_results(ctx)
-        return StepResult.ok()
+        return self._dismiss_results(ctx)
 
     # ------------------------------------------------------------------
     def _start_auto(self, ctx: Context) -> StepResult:
@@ -180,14 +184,24 @@ class OvenEquipmentDraw(QuestDefinition):
         ctx.tap_match(match)
         return StepResult.ok()
 
-    def _dismiss_results(self, ctx: Context) -> None:
+    def _dismiss_results(self, ctx: Context) -> StepResult:
         """뽑힌 장비 팝업을 빈 곳 탭으로 치우며 뽑기가 끝나기를 기다린다.
 
-        여기서 실패해도 진행 불가로 보지 않는다. 퀘스트창이 다시 보이면
-        상태기가 완료 여부를 직접 확인하기 때문이다.
+        빈 곳 탭은 **X 버튼이 없는 팝업**을 넘기는 수단이다. 장비 비교 팝업이
+        그런 경우다. 반대로 X 가 있는 팝업은 빈 곳을 아무리 눌러도 닫히지 않는다.
+        재료(행운반죽)가 모자라 '아이템이 부족합니다' 안내가 뜨는 경우가 그렇고,
+        예전에는 여기서 스무 번을 두드리며 1분을 버린 뒤에야 넘어갔다.
+
+        그래서 X 가 보이면 두드리기를 멈추고 진행 불가로 알린다. 팝업을 치우는
+        건 상태기의 몫이고(그쪽이 X 를 누른다), 재료가 없어 못 하는 것이라면
+        사람이 알아야 한다.
+
+        X 가 없는 채로 상한까지 못 치웠을 때는 진행 불가로 보지 않는다.
+        퀘스트창이 다시 보이면 상태기가 완료 여부를 직접 확인하기 때문이다.
         """
         panel_area = ctx.anchors.get(anchor_names.QUEST_PANEL)
         safe_tap = ctx.anchors.get(anchor_names.SAFE_TAP)
+        navigator = BattleScreenNavigator(ctx.anchors.get(anchor_names.NAV_CLOSE))
 
         def panel_back(frame) -> bool:
             return panel_visible(frame, panel_area)
@@ -196,13 +210,20 @@ class OvenEquipmentDraw(QuestDefinition):
             if panel_back(ctx.frame):
                 if attempt:
                     ctx.log(f"결과 팝업 정리 완료 ({attempt}회 탭)")
-                return
+                return StepResult.ok()
+
+            # 첫 판은 봐 준다. 시작 직후에는 아직 연출이 돌고 있을 수 있다.
+            if attempt and navigator.has_close_button(ctx.frame):
+                return StepResult.blocked(
+                    "자동 열기가 시작되지 않았습니다. 재료가 부족할 수 있습니다"
+                )
 
             ctx.tap_rect(safe_tap)
             if ctx.wait_until(panel_back, DISMISS_TIMEOUT):
                 ctx.log(f"결과 팝업 정리 완료 ({attempt + 1}회 탭)")
-                return
+                return StepResult.ok()
             if ctx.stopping:
-                return
+                return StepResult.ok()
 
         ctx.log("뽑기 결과 팝업이 계속 남아 있습니다. 상태 확인으로 넘어갑니다.")
+        return StepResult.ok()
