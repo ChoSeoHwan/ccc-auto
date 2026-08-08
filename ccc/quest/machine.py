@@ -31,6 +31,13 @@ log = logging.getLogger(__name__)
 
 MAX_CONSECUTIVE_FAILURES = 3
 
+MAX_CONSECUTIVE_RETRIES = 10
+"""``StepResult.retry`` 로 돌아온 실패를 이만큼까지 봐 준다.
+
+기다리면 풀릴 일(오븐 Auto 가 아직 안 보인다 같은)에는 사람을 부르지 않는다.
+다 쓰면 멈추지 않고 '퀘스트확인' 으로 돌아가 처음부터 다시 본다.
+"""
+
 MIN_SCORE_MARGIN = 0.08
 """1등이 2등보다 이만큼은 앞서야 퀘스트를 확정한다.
 
@@ -78,6 +85,7 @@ class QuestMachine:
         safe_tap_area: NormRect,
         notifier: Notifier,
         max_failures: int = MAX_CONSECUTIVE_FAILURES,
+        max_retries: int = MAX_CONSECUTIVE_RETRIES,
         max_unknown_reads: int = MAX_UNKNOWN_READS,
         unknown_tap_interval: int = UNKNOWN_TAP_INTERVAL,
         unknown_quest_retry: float = UNKNOWN_QUEST_RETRY,
@@ -92,6 +100,7 @@ class QuestMachine:
         self._safe_tap_area = safe_tap_area
         self._notifier = notifier
         self._max_failures = max_failures
+        self._max_retries = max_retries
         self._max_unknown_reads = max_unknown_reads
         self._unknown_tap_interval = max(1, unknown_tap_interval)
         self._unknown_quest_retry = unknown_quest_retry
@@ -103,6 +112,7 @@ class QuestMachine:
         self.step = ProgressStep.IDENTIFY
         self.current_quest: QuestDefinition | None = None
         self._failures = 0
+        self._retries = 0
         self._unknown_reads = 0
         self._unknown_quest_since: float | None = None
         self._last_notice = ""
@@ -120,6 +130,7 @@ class QuestMachine:
     def start(self) -> None:
         """대기 상태에서 자동화를 시작한다."""
         self._failures = 0
+        self._retries = 0
         self._unknown_reads = 0
         self._unknown_quest_since = None
         self.current_quest = None
@@ -127,6 +138,7 @@ class QuestMachine:
         self._enter(MainState.CHECK)
 
     def to_idle(self, reason: str = "") -> None:
+        self._retries = 0
         self._unknown_reads = 0
         self._unknown_quest_since = None
         self.current_quest = None
@@ -156,6 +168,7 @@ class QuestMachine:
         reading = self._panel_reader.read(ctx.frame)
         if reading.state is PanelState.GOLD:
             self._unknown_reads = 0
+            self._quest_recognized()
             ctx.log(f"퀘스트 완료 상태 감지 ({reading.detail})")
             self._enter(MainState.COMPLETE)
         elif reading.state is PanelState.GRAY:
@@ -201,9 +214,10 @@ class QuestMachine:
             self._on_unknown_quest(ctx)
             return
 
-        self._unknown_quest_since = None
+        self._quest_recognized()
         if matched is not self.current_quest:
             self._failures = 0  # 퀘스트가 바뀌면 실패 카운터를 리셋한다
+            self._retries = 0
         self.current_quest = matched
         ctx.log(f"퀘스트 판별: {matched.label}")
         self.step = ProgressStep.EXECUTE
@@ -245,8 +259,13 @@ class QuestMachine:
         result = quest.execute(ctx)
         if result.success:
             self._failures = 0
+            self._retries = 0
             self.step = ProgressStep.VERIFY
             self._announce()
+            return
+
+        if result.retryable:
+            self._on_retryable(ctx, quest, result.reason)
             return
 
         self._failures += 1
@@ -261,6 +280,20 @@ class QuestMachine:
         self._panel_reader.reset()
         self._enter(MainState.CHECK)
 
+    def _on_retryable(self, ctx: Context, quest: QuestDefinition, reason: str) -> None:
+        """기다리면 풀릴 실패. 사람을 부르지 않고 처음부터 다시 본다."""
+        self._retries += 1
+        ctx.log(f"아직 못 합니다 ({self._retries}/{self._max_retries}): {reason}")
+        if self._retries >= self._max_retries:
+            ctx.log(
+                f"'{quest.label}' 을(를) {self._max_retries}번 시도했습니다. "
+                "퀘스트확인부터 다시 봅니다."
+            )
+            self._retries = 0
+            self.current_quest = None
+        self._panel_reader.reset()
+        self._enter(MainState.CHECK)
+
     def _verify(self, ctx: Context) -> None:
         if not self._ensure_battle_screen(ctx):
             return
@@ -268,6 +301,7 @@ class QuestMachine:
         reading = self._panel_reader.read(ctx.frame)
         if reading.state is PanelState.GOLD:
             self._unknown_reads = 0
+            self._quest_recognized()
             ctx.log(f"퀘스트 완료 확인 ({reading.detail})")
             self._enter(MainState.COMPLETE)
         elif reading.state is PanelState.GRAY:
@@ -281,6 +315,15 @@ class QuestMachine:
     # ------------------------------------------------------------------
     # 공통
     # ------------------------------------------------------------------
+    def _quest_recognized(self) -> None:
+        """퀘스트를 알아봤다. 못 알아본 시간을 다시 0 부터 센다.
+
+        판별에 성공했을 때뿐 아니라 완료(황금)를 읽었을 때도 부른다. 그러지
+        않으면 중간에 보상을 받고 넘어가도 예전에 못 알아본 시각이 그대로
+        남아, 다음에 모르는 퀘스트가 한 번만 나와도 곧바로 상한을 넘긴다.
+        """
+        self._unknown_quest_since = None
+
     def _on_unknown_reading(self, ctx: Context, reading: PanelReading) -> None:
         """퀘스트창을 못 읽었을 때.
 

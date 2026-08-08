@@ -384,12 +384,7 @@ class ControlWindow(tk.Tk):
         frame = self._capture()
         if frame is None:
             return None
-        guide = f"[{spec.label}]  화면: {spec.where}  ·  대상: {spec.what}"
-        if spec.tip:
-            guide += f"\n주의: {spec.tip}"
-        dialog = TemplateCaptureDialog(
-            self, frame, self.app.templates, preset_name=spec.name, guide=guide
-        )
+        dialog = TemplateCaptureDialog(self, frame, self.app.templates, spec=spec)
         self.wait_window(dialog)
         if dialog.saved_name:
             self._log(f"템플릿 저장됨: {spec.label} ({dialog.saved_name})")

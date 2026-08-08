@@ -124,6 +124,7 @@ ccc
 - **퀘스트확인** — 하단 중앙의 빨간 X 가 있으면 눌러 전투화면까지 돌아온 뒤,
   퀘스트창 색으로 완료(황금)/진행중(회색)을 가른다.
 - **퀘스트진행** — `판별` → `수행` → `완료확인`. 같은 퀘스트에서 3번 연속 막히면 알림 후 대기.
+  기다리면 풀릴 실패(`StepResult.retry`)는 10번까지 봐 주고, 멈추는 대신 퀘스트확인으로 돌아간다.
 - **퀘스트완료** — 퀘스트창을 눌러 보상을 받고 다시 확인 단계로 간다.
 
 ### 무엇을 보고 판단하는가
@@ -183,6 +184,7 @@ ctx.wait_for_template(이름, 상한)    # 버튼이 나타나면 즉시 그걸 
 
 ```python
 from ccc.context import Context
+from ccc.geometry import NormRect
 from ccc.quest.definition import QuestDefinition, StepResult
 from ccc.templates_spec import NUMBER_TIP, SIZE_TIP, TemplateSpec
 
@@ -197,7 +199,8 @@ class 출석보상(QuestDefinition):
             label="퀘스트 이름 · 출석 보상",
             where="전투화면에 이 퀘스트가 회색으로 떠 있을 때",
             what="퀘스트 이름 글자 줄",
-            tip=f"{NUMBER_TIP} {SIZE_TIP}",
+            tips=(NUMBER_TIP, SIZE_TIP),          # 한 줄에 하나씩 표시된다
+            default_area=NormRect(0.76, 0.54, 0.20, 0.018),
         ),
     ]
 
@@ -212,7 +215,11 @@ class 출석보상(QuestDefinition):
 
 - `execute` 는 절차를 마치면 `StepResult.ok()`, 막히면 `StepResult.blocked(사유)`.
   전투화면 복귀는 상태기가 알아서 하므로 여기서 되돌아올 필요가 없다.
+- 기다리면 풀릴 실패(연출이 가렸다, 버튼이 아직 안 나왔다)는 `StepResult.retry(사유)` 를 쓴다.
+  `blocked` 와 달리 사람을 부르지 않고 10번까지 봐 준 뒤 퀘스트확인으로 돌아간다.
 - `template_specs` 를 적으면 캡처 마법사가 사용자를 안내한다. 안 적으면 목록에 안 나온다.
+- `default_area` 를 적어 두면 마법사가 그 자리를 미리 잡아 준다. 사용자는 맞는지 보고
+  그대로 저장하거나 조금만 끌어 고치면 된다. `python tools/dev.py crop` 으로 값을 잡는다.
 - 만든 뒤 `python tools/dev.py identify` 로 **다른 퀘스트와 점수 차이가 0.08 이상 나는지**
   확인한다. 이름이 비슷한 퀘스트가 있으면 여기서 드러난다.
 

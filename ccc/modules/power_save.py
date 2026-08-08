@@ -35,7 +35,8 @@ class ExitPowerSaveMode(AutomationModule):
             label="더 절전 모드 라벨",
             where="게임을 한동안 두면 저절로 들어가는 절전 모드 화면",
             what="화면 오른쪽 아래의 '더 절전 모드' 글자",
-            tip="토글 스위치는 빼고 글자만 잡는다.",
+            tips=("토글 스위치는 빼고 글자만 잡는다.",),
+            default_area=NormRect(0.6630, 0.9391, 0.2065, 0.0271),
         )
     ]
 

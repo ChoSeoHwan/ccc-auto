@@ -78,6 +78,23 @@ class ImageRegionPicker(ttk.Frame):
         self._overlay_ids.clear()
 
     # ------------------------------------------------------------------
+    # 미리 잡아 주기
+    # ------------------------------------------------------------------
+    def set_selection(self, rect: NormRect, notify: bool = True) -> None:
+        """드래그 없이 영역을 지정해 둔다. 마법사가 기본 자리를 띄울 때 쓴다."""
+        self.selection = rect
+        self._draw_selection_rect(rect)
+        if notify and self.on_select:
+            self.on_select(rect)
+
+    def _draw_selection_rect(self, rect: NormRect) -> None:
+        self._clear_selection_rect()
+        view = rect.scaled(*self._view_size)
+        self._rect_id = self.canvas.create_rectangle(
+            view.x, view.y, view.right, view.bottom, outline=_ACCENT, width=2
+        )
+
+    # ------------------------------------------------------------------
     # 드래그
     # ------------------------------------------------------------------
     def _on_press(self, event: tk.Event) -> None:

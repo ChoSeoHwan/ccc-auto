@@ -15,6 +15,8 @@ from ..templates_spec import TemplateSpec
 from ..vision import TemplateStore
 
 _PAD = 10
+_WRAP = 540
+_MUTED = "#666"
 
 
 class TemplateSetupDialog(tk.Toplevel):
@@ -28,7 +30,7 @@ class TemplateSetupDialog(tk.Toplevel):
         super().__init__(master)
         self.title("템플릿 설정")
         self.transient(master)
-        self.minsize(560, 420)
+        self.minsize(600, 460)
 
         self.specs = specs
         self.store = store
@@ -66,12 +68,8 @@ class TemplateSetupDialog(tk.Toplevel):
         scroll.pack(side="right", fill="y")
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._show_guide())
 
-        guide = ttk.LabelFrame(self, text="캡처 방법", padding=_PAD)
-        guide.pack(fill="x", padx=_PAD, pady=_PAD)
-        self.guide_var = tk.StringVar(value="왼쪽에서 항목을 고르세요.")
-        ttk.Label(guide, textvariable=self.guide_var, justify="left", wraplength=520).pack(
-            anchor="w"
-        )
+        self.guide = ttk.LabelFrame(self, text="캡처 방법", padding=_PAD)
+        self.guide.pack(fill="x", padx=_PAD, pady=_PAD)
 
         bar = ttk.Frame(self, padding=(_PAD, 0, _PAD, _PAD))
         bar.pack(fill="x")
@@ -102,8 +100,9 @@ class TemplateSetupDialog(tk.Toplevel):
         )
 
         target = selected[0] if selected and self.tree.exists(selected[0]) else None
-        if target is None and missing:
-            target = missing[0].name
+        if target is None:
+            # 남은 것부터, 다 됐으면 첫 항목. 안내 칸이 빈 채로 열리지 않게 한다.
+            target = (missing[0] if missing else self.specs[0]).name if self.specs else None
         if target:
             self.tree.selection_set(target)
             self.tree.see(target)
@@ -116,16 +115,29 @@ class TemplateSetupDialog(tk.Toplevel):
         return next((s for s in self.specs if s.name == selection[0]), None)
 
     def _show_guide(self) -> None:
+        """항목마다 한 줄씩 띄운다. 한 덩어리로 붙여 놓으면 읽히지 않는다."""
+        for child in self.guide.winfo_children():
+            child.destroy()
+
         spec = self._selected_spec()
         if spec is None:
-            self.guide_var.set("왼쪽에서 항목을 고르세요.")
+            ttk.Label(self.guide, text="왼쪽에서 항목을 고르세요.").pack(anchor="w")
             self.capture_btn.config(state="disabled")
             return
 
-        lines = [f"화면: {spec.where}", f"대상: {spec.what}"]
-        if spec.tip:
-            lines.append(f"주의: {spec.tip}")
-        self.guide_var.set("\n".join(lines))
+        for line in spec.guide_lines():
+            ttk.Label(
+                self.guide, text=line, justify="left", wraplength=_WRAP, foreground=_MUTED
+            ).pack(anchor="w", pady=(0, 3))
+
+        if spec.default_area is not None:
+            ttk.Label(
+                self.guide,
+                text="'이 항목 캡처' 를 누르면 기본 자리가 잡힌 채로 열립니다.",
+                justify="left",
+                wraplength=_WRAP,
+            ).pack(anchor="w", pady=(4, 0))
+
         self.capture_btn.config(state="normal")
 
     def _capture_selected(self) -> None:

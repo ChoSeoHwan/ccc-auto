@@ -34,6 +34,8 @@ class StepResult:
 
     success: bool
     reason: str = ""
+    retryable: bool = False
+    """화면만 바뀌면 저절로 풀릴 실패인지. ``retry`` 로 만든 결과만 True."""
 
     @classmethod
     def ok(cls, reason: str = "") -> "StepResult":
@@ -41,8 +43,18 @@ class StepResult:
 
     @classmethod
     def blocked(cls, reason: str) -> "StepResult":
-        """더 이상 진행할 수 없을 때. 상태기가 '퀘스트확인' 으로 되돌린다."""
+        """더 이상 진행할 수 없을 때. 몇 번 되풀이되면 알림 후 대기로 멈춘다."""
         return cls(False, reason)
+
+    @classmethod
+    def retry(cls, reason: str) -> "StepResult":
+        """지금은 못 하지만 화면이 바뀌면 될 수 있을 때.
+
+        ``blocked`` 와 달리 사람을 부르지 않는다. 훨씬 넉넉한 횟수까지 봐 주고,
+        그래도 안 되면 멈추는 대신 '퀘스트확인' 으로 돌아가 처음부터 다시 본다.
+        연출이 지나가기를 기다리면 되는 일로 자동화를 세우지 않기 위해서다.
+        """
+        return cls(False, reason, retryable=True)
 
 
 class QuestDefinition(abc.ABC):

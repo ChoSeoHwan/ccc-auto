@@ -6,11 +6,18 @@
 
 각자 자기 화면에서 뜨는 편이 정확하기도 하다. 해상도·언어·보유 아이템이
 사람마다 다르기 때문이다.
+
+다만 **어디를 잘라야 하는지는 사람마다 같다**. 게임 UI 배치는 9:16 이면
+해상도와 무관하게 같은 자리에 있기 때문이다. 그래서 각 선언에 실측해 둔
+``default_area`` 를 붙여 두고, 마법사가 그 자리를 미리 잡아서 보여 준다.
+사용자는 맞는지 보고 그대로 저장하거나 조금만 끌어 고치면 된다.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from .geometry import NormRect
 
 
 @dataclass(frozen=True)
@@ -29,19 +36,24 @@ class TemplateSpec:
     what: str
     """그 화면에서 무엇을 드래그해야 하는지."""
 
-    tip: str = ""
-    """놓치기 쉬운 주의사항."""
+    tips: tuple[str, ...] = ()
+    """놓치기 쉬운 주의사항. 하나씩 따로 적는다 — 화면에 한 줄씩 나눠 띄운다."""
+
+    default_area: NormRect | None = None
+    """미리 잡아 둘 영역. 마법사가 이 자리를 기본 선택으로 띄운다.
+
+    9:16 화면에서 실측한 값이다. 게임 UI 는 해상도가 달라도 같은 비율 자리에
+    있으므로 대개 그대로 맞는다. 없으면 사용자가 처음부터 드래그한다.
+    """
+
+    def guide_lines(self) -> list[str]:
+        """캡처 화면에 한 줄씩 띄울 안내."""
+        return [f"화면 · {self.where}", f"대상 · {self.what}", *(f"주의 · {t}" for t in self.tips)]
 
     def describe(self) -> str:
-        lines = [f"[{self.label}]  ({self.name})", f"  화면: {self.where}", f"  대상: {self.what}"]
-        if self.tip:
-            lines.append(f"  주의: {self.tip}")
-        return "\n".join(lines)
+        return "\n".join([f"[{self.label}]  ({self.name})", *self.guide_lines()])
 
 
-NUMBER_TIP = "숫자와 '퀘스트 1319' 같은 번호는 빼고 잡는다. 횟수가 달라져도 걸리게 하기 위해서다."
+NUMBER_TIP = "숫자와 퀘스트 번호는 빼고 잡는다 (횟수가 바뀌어도 걸리도록)."
 
-SIZE_TIP = (
-    "너무 작게 자르면 창을 줄여 쓸 때 매칭이 무너진다. "
-    "이름 줄이 짧으면 아래 줄까지 함께 감싸 넉넉히 잡는다."
-)
+SIZE_TIP = "너무 작게 자르지 않는다. 창을 줄이면 매칭이 무너진다."

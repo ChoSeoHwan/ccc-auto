@@ -57,20 +57,23 @@ class UseBoxFromBag(QuestDefinition):
             label="퀘스트 이름 · 가방에서 상자 사용하기",
             where="전투화면에 '가방에서 상자 N개 사용하기' 퀘스트가 회색으로 떠 있을 때",
             what="퀘스트 이름 두 줄을 함께",
-            tip=f"{NUMBER_TIP} {SIZE_TIP}",
+            tips=(NUMBER_TIP, SIZE_TIP),
+            default_area=NormRect(0.7593, 0.5354, 0.1907, 0.0339),
         ),
         TemplateSpec(
             name=BOX_TEMPLATE,
             label="가방의 보물상자 아이콘",
             where="퀘스트창을 눌러 연 가방 UI",
             what="쓰려는 상자 아이콘 그림",
-            tip="칸 아래의 보유 개수 숫자는 빼고 그림만 잡는다. 개수가 줄면 안 맞게 된다.",
+            tips=("칸 아래의 보유 개수 숫자는 빼고 그림만 잡는다. 개수가 줄면 안 맞는다.",),
+            default_area=NormRect(0.0900, 0.5620, 0.1340, 0.0580),
         ),
         TemplateSpec(
             name=USE_TEMPLATE,
             label="사용하기 버튼",
             where="가방에서 상자를 누르면 뜨는 상세 팝업",
             what="주황색 '사용하기' 버튼 전체",
+            default_area=NormRect(0.2565, 0.4177, 0.4852, 0.0531),
         ),
     ]
 

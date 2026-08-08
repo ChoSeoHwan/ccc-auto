@@ -76,6 +76,7 @@ class QuestAutomation(AutomationModule):
             ctx.anchors.get(anchor_names.SAFE_TAP),
             ctx.notifier,
             max_failures=ctx.option("max_failures", 3),
+            max_retries=ctx.option("max_retries", 10),
             max_unknown_reads=ctx.option("max_unknown_reads", 20),
             unknown_quest_retry=ctx.option("unknown_quest_retry", 5.0),
             unknown_quest_timeout=ctx.option("unknown_quest_timeout", 60.0),

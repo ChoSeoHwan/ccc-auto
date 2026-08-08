@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from ..geometry import NormRect
 from ..templates_spec import NUMBER_TIP, SIZE_TIP, TemplateSpec
 from ._gacha import TenDrawQuest
 
@@ -26,15 +27,21 @@ class PetDraw(TenDrawQuest):
             name="quest_pet_draw",
             label="퀘스트 이름 · 펫 뽑기",
             where="전투화면에 '펫 뽑기 N회 하기' 퀘스트가 회색으로 떠 있을 때",
-            what="퀘스트 이름 글자 줄",
-            tip=f"{NUMBER_TIP} {SIZE_TIP} 쿠키 뽑기와 이름이 비슷하니 뜬 뒤 "
-                "'퀘스트 판별 점검' 으로 두 퀘스트가 갈리는지 확인한다.",
+            what="'펫 뽑기' 까지만. 'N회 하기' 는 자른다",
+            tips=(
+                NUMBER_TIP,
+                SIZE_TIP,
+                "쿠키 뽑기와 이름이 비슷하다. 뜬 뒤 '퀘스트 판별 점검' 으로 둘이 갈리는지 본다.",
+            ),
+            # 쿠키 뽑기 쪽 주석 참고. 'N회 하기' 가 둘의 공통 부분이라 반드시 뺀다.
+            default_area=NormRect(0.7602, 0.5432, 0.0769, 0.0177),
         ),
         TemplateSpec(
             name="gacha_pet_draw10",
             label="펫 뽑기 10회 버튼",
             where="펫 뽑기 화면 (아래 '펫 뽑기' 탭)",
             what="가운데 주황색 '10회' 버튼 전체",
-            tip="펫 뽑기권이 10장 이상일 때 잡는다.",
+            tips=("펫 뽑기권이 10장 이상일 때 잡는다.",),
+            default_area=NormRect(0.3500, 0.7802, 0.2963, 0.0646),
         ),
     ]
