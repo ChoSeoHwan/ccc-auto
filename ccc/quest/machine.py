@@ -305,10 +305,14 @@ class QuestMachine:
         self._failures += 1
         ctx.log(f"진행 불가 ({self._failures}/{self._max_failures}): {result.reason}")
         if self._failures >= self._max_failures:
+            # 막힌 화면을 남긴다. 드물게만 나오는 팝업은 사람이 다시 만들어
+            # 내기 어려워서, 막히는 그 순간을 붙잡아 두지 않으면 고칠 수 없다.
+            saved = save_snapshot(ctx.frame, self._panel_area, "quest-blocked")
+            hint = f" 화면을 저장했습니다: {saved}" if saved else ""
             self._abort(
                 ctx,
                 f"'{quest.label}' 을(를) {self._max_failures}번 연속 진행하지 못했습니다: "
-                f"{result.reason}",
+                f"{result.reason}.{hint}",
             )
             return
         self._panel_reader.reset()
