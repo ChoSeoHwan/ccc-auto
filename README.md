@@ -11,13 +11,35 @@
 
 ## 1. 설치
 
+파이썬 3.10 이상이 필요하다. 시스템 파이썬을 더럽히지 않도록 **가상환경(venv) 안에**
+설치한다. 저장소를 받고, 가상환경을 만들고, 켠 다음 설치한다.
+
 ```bash
 git clone https://github.com/ChoSeoHwan/ccc-auto.git && cd ccc-auto
+python -m venv .venv
+```
+
+가상환경을 켜는 명령만 셸마다 다르다.
+
+| 셸 | 켜기 |
+| --- | --- |
+| Windows PowerShell | `.venv\Scripts\Activate.ps1` |
+| Windows cmd | `.venv\Scripts\activate.bat` |
+| macOS / Linux (bash·zsh) | `source .venv/bin/activate` |
+
+켜지면 프롬프트 앞에 `(.venv)` 가 붙는다. 그 상태에서 설치한다.
+
+```bash
 pip install -e .
 ```
 
-두 줄이 전부다. 별도로 설치할 프로그램은 없다 — `adb` 는 블루스택이 번들로 갖고 있는 것을
-자동으로 찾아 쓴다. Windows / macOS 모두 같다.
+별도로 설치할 프로그램은 없다 — `adb` 는 블루스택이 번들로 갖고 있는 것을 자동으로 찾아
+쓴다. Windows / macOS 모두 같다.
+
+`.venv/` 는 git 에서 제외돼 있다. 지우고 위 과정을 다시 밟으면 처음 상태로 돌아간다.
+
+> PowerShell 에서 `Activate.ps1` 이 실행 정책 때문에 막히면 그 창에서 한 번만
+> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned` 를 실행하고 다시 켠다.
 
 > Linux 데스크톱에서 GUI 를 쓰려면 `tkinter` 가 필요하다: `sudo apt install python3-tk`.
 > 블루스택 자체가 Windows / macOS 전용이라 보통은 해당 없다.
@@ -31,11 +53,17 @@ pip install -e .
 
 ## 3. 실행
 
+**가상환경을 켠 상태에서** 실행한다. 새 터미널을 열 때마다 한 번씩 켜 줘야 한다
+(위 표의 켜기 명령).
+
 ```bash
 ccc
 ```
 
-창이 뜨면 자동으로 ADB 에 연결한다. `pip install -e .` 을 하지 않았다면 `python main.py` 도 같다.
+창이 뜨면 자동으로 ADB 에 연결한다. `python main.py` 도 같다.
+
+> `ccc: command not found` / `'ccc' 용어가 인식되지 않습니다` 가 나오면 가상환경이 꺼져
+> 있는 것이다. 켜기 명령을 다시 실행한다.
 
 | 명령 | 하는 일 |
 | --- | --- |
@@ -185,7 +213,7 @@ class 출석보상(QuestDefinition):
 - `execute` 는 절차를 마치면 `StepResult.ok()`, 막히면 `StepResult.blocked(사유)`.
   전투화면 복귀는 상태기가 알아서 하므로 여기서 되돌아올 필요가 없다.
 - `template_specs` 를 적으면 캡처 마법사가 사용자를 안내한다. 안 적으면 목록에 안 나온다.
-- 만든 뒤 `python3 tools/dev.py identify` 로 **다른 퀘스트와 점수 차이가 0.08 이상 나는지**
+- 만든 뒤 `python tools/dev.py identify` 로 **다른 퀘스트와 점수 차이가 0.08 이상 나는지**
   확인한다. 이름이 비슷한 퀘스트가 있으면 여기서 드러난다.
 
 ## 자동화 모듈 추가하기
@@ -238,20 +266,20 @@ ADB 로 내보내므로, 창 크기나 해상도가 바뀌어도 코드는 고�
 ## 개발 도구
 
 작업하면서 반복하는 일은 `tools/dev.py` 에 모여 있다. 셸 힙독이나 파이프 없이 단순한 명령
-하나로 끝난다.
+하나로 끝난다. 여기도 가상환경을 켠 상태에서 실행한다.
 
 ```bash
-python3 tools/dev.py diag                        # 연결 · 캡처 · 인식 상태
-python3 tools/dev.py goto-battle                 # 팝업 · 절전 모드를 치우고 전투화면까지
-python3 tools/dev.py shot --anchors              # 화면 저장 (앵커 겹쳐 그리기)
-python3 tools/dev.py crop 0.55 0.5 0.45 0.11     # 영역만 잘라 저장 (정규화 좌표)
-python3 tools/dev.py lines                       # 퀘스트창 안의 글자 줄 좌표
-python3 tools/dev.py locate orange --area ...    # 색으로 버튼 위치 찾기 (눈대중 대신)
-python3 tools/dev.py template list / save / test # 템플릿 목록 · 저장 · 배율별 점수
-python3 tools/dev.py identify                    # 퀘스트 판별 점수를 늘어놓기
-python3 tools/dev.py tap --anchor quest_panel    # 앵커나 좌표를 한 번 누르기
-python3 tools/dev.py run --seconds 60            # 자동화를 잠깐 돌려 보기
-python3 tools/dev.py bench                       # 구간별 소요 시간
+python tools/dev.py diag                        # 연결 · 캡처 · 인식 상태
+python tools/dev.py goto-battle                 # 팝업 · 절전 모드를 치우고 전투화면까지
+python tools/dev.py shot --anchors              # 화면 저장 (앵커 겹쳐 그리기)
+python tools/dev.py crop 0.55 0.5 0.45 0.11     # 영역만 잘라 저장 (정규화 좌표)
+python tools/dev.py lines                       # 퀘스트창 안의 글자 줄 좌표
+python tools/dev.py locate orange --area ...    # 색으로 버튼 위치 찾기 (눈대중 대신)
+python tools/dev.py template list / save / test # 템플릿 목록 · 저장 · 배율별 점수
+python tools/dev.py identify                    # 퀘스트 판별 점수를 늘어놓기
+python tools/dev.py tap --anchor quest_panel    # 앵커나 좌표를 한 번 누르기
+python tools/dev.py run --seconds 60            # 자동화를 잠깐 돌려 보기
+python tools/dev.py bench                       # 구간별 소요 시간
 ```
 
 `--from 파일.png` 을 붙이면 지금 화면 대신 저장해 둔 이미지로 검사한다.
@@ -263,6 +291,8 @@ python3 tools/dev.py bench                       # 구간별 소요 시간
 것이므로 더 넓게 다시 잡는다.
 
 ## 테스트
+
+가상환경을 켠 뒤 개발용 의존성까지 넣는다.
 
 ```bash
 pip install -e ".[dev]"
