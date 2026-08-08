@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 tools/dev.py *)",
+      "Bash(python3 main.py --check)",
+      "Bash(python3 main.py --shot *)",
+      "Bash(python3 -m pytest tests/ *)",
+      "Bash(python3 -m compileall -q ccc main.py tools)"
+    ]
+  }
+}

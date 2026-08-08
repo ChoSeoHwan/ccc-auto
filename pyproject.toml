@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ccc-auto"
+version = "0.1.0"
+description = "블루스택에서 도는 쿠키런: 크럼블을 ADB 로 자동화한다"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# 상한을 함께 둬서 새 major 가 나와도 같은 동작을 유지한다.
+dependencies = [
+    "mss>=9.0.1,<11",
+    "numpy>=1.26,<3",
+    "opencv-python>=4.9,<6",
+    "Pillow>=10.0,<12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0,<10", "pytest-bdd>=8.0,<9"]
+
+[project.scripts]
+ccc = "main:main"
+
+[tool.setuptools]
+packages = ["ccc", "ccc.adb", "ccc.capture", "ccc.modules", "ccc.quest", "ccc.quests", "ccc.ui", "ccc.vision"]
+py-modules = ["main"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

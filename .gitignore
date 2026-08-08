@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# 편집기 설정
+.idea/
+.vscode/
+
+# 머신마다 다른 설정
+config.json
+ccc-auto.log
+
+# 이 컴퓨터에서만 쓰는 것 — 캡처한 템플릿, 테스트 화면, 진단 이미지.
+# 게임 화면 이미지는 저작물이라 저장소에 넣지 않는다.
+/local/
