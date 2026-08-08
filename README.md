@@ -12,7 +12,7 @@
 ## 1. 설치
 
 ```bash
-git clone <저장소> && cd ccc-auto
+git clone https://github.com/ChoSeoHwan/ccc-auto.git && cd ccc-auto
 pip install -e .
 ```
 
