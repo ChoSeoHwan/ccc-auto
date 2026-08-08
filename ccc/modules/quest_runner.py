@@ -79,7 +79,8 @@ class QuestAutomation(AutomationModule):
             max_retries=ctx.option("max_retries", 10),
             max_unknown_reads=ctx.option("max_unknown_reads", 20),
             unknown_quest_retry=ctx.option("unknown_quest_retry", 2.0),
-            unknown_quest_timeout=ctx.option("unknown_quest_timeout", 60.0),
+            unknown_quest_timeout=ctx.option("unknown_quest_timeout", 30.0),
+            max_unknown_rounds=ctx.option("max_unknown_rounds", 3),
             on_change=self._remember_status,
         )
         self.machine.start()

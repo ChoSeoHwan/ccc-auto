@@ -59,8 +59,18 @@ UNKNOWN_QUEST_RETRY = 2.0
 못 알아봤다고 바로 멈추면 그런 순간에도 자동화가 끊긴다.
 """
 
-UNKNOWN_QUEST_TIMEOUT = 60.0
-"""이만큼 계속 못 알아보면 진짜 모르는 퀘스트로 보고 멈춘다."""
+UNKNOWN_QUEST_TIMEOUT = 30.0
+"""이만큼 계속 못 알아보면 한 라운드가 끝난 것으로 보고 퀘스트확인부터 다시 본다.
+
+퀘스트창을 잘못 읽고 있었다면 확인 단계를 다시 밟는 것만으로 풀린다.
+"""
+
+MAX_UNKNOWN_ROUNDS = 3
+"""위 라운드를 이만큼 되풀이해도 못 알아보면 그때는 알림 후 대기로 멈춘다.
+
+세 번을 처음부터 다시 봤는데도 모르겠다면 화면을 잘못 읽는 게 아니라 정말
+등록되지 않은 퀘스트다.
+"""
 
 MAX_UNKNOWN_READS = 20
 """퀘스트창을 이만큼 연속으로 못 읽으면 멈추고 알린다."""
@@ -90,6 +100,7 @@ class QuestMachine:
         unknown_tap_interval: int = UNKNOWN_TAP_INTERVAL,
         unknown_quest_retry: float = UNKNOWN_QUEST_RETRY,
         unknown_quest_timeout: float = UNKNOWN_QUEST_TIMEOUT,
+        max_unknown_rounds: int = MAX_UNKNOWN_ROUNDS,
         on_change: Callable[[str], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ):
@@ -105,6 +116,7 @@ class QuestMachine:
         self._unknown_tap_interval = max(1, unknown_tap_interval)
         self._unknown_quest_retry = unknown_quest_retry
         self._unknown_quest_timeout = unknown_quest_timeout
+        self._max_unknown_rounds = max(1, max_unknown_rounds)
         self._on_change = on_change
         self._clock = clock
 
@@ -115,6 +127,7 @@ class QuestMachine:
         self._retries = 0
         self._unknown_reads = 0
         self._unknown_quest_since: float | None = None
+        self._unknown_rounds = 0
         self._last_notice = ""
 
     # ------------------------------------------------------------------
@@ -133,6 +146,7 @@ class QuestMachine:
         self._retries = 0
         self._unknown_reads = 0
         self._unknown_quest_since = None
+        self._unknown_rounds = 0
         self.current_quest = None
         self._panel_reader.reset()
         self._enter(MainState.CHECK)
@@ -141,6 +155,7 @@ class QuestMachine:
         self._retries = 0
         self._unknown_reads = 0
         self._unknown_quest_since = None
+        self._unknown_rounds = 0
         self.current_quest = None
         self._panel_reader.reset()
         self._enter(MainState.IDLE, reason)
@@ -224,25 +239,44 @@ class QuestMachine:
         self._announce()
 
     def _on_unknown_quest(self, ctx: Context) -> None:
-        """알아보지 못한 퀘스트. 잠시 뒤 다시 확인하고, 오래 가면 멈춘다."""
+        """알아보지 못한 퀘스트.
+
+        2초마다 다시 본다. 30초를 채우면 한 라운드가 끝난 것으로 보고 시계를
+        0 으로 돌린 뒤 퀘스트확인부터 다시 밟는다. 퀘스트창을 잘못 읽고 있었던
+        거라면 확인 단계를 다시 거치는 것만으로 풀린다. 그렇게 세 라운드를
+        되풀이해도 모르겠다면 그때는 정말 등록되지 않은 퀘스트다.
+        """
         now = self._clock()
         if self._unknown_quest_since is None:
             self._unknown_quest_since = now
 
         elapsed = now - self._unknown_quest_since
         if elapsed >= self._unknown_quest_timeout:
-            saved = save_snapshot(ctx.frame, self._panel_area, "unknown-quest")
-            hint = f" 화면을 저장했습니다: {saved}" if saved else ""
-            self._abort(
-                ctx,
-                f"{self._unknown_quest_timeout:.0f}초 동안 퀘스트를 알아보지 못했습니다. "
-                f"지시문을 추가해 주세요.{hint}",
+            self._unknown_rounds += 1
+            if self._unknown_rounds >= self._max_unknown_rounds:
+                saved = save_snapshot(ctx.frame, self._panel_area, "unknown-quest")
+                hint = f" 화면을 저장했습니다: {saved}" if saved else ""
+                self._abort(
+                    ctx,
+                    f"{self._unknown_quest_timeout:.0f}초씩 {self._unknown_rounds}번을 "
+                    f"다시 봤지만 퀘스트를 알아보지 못했습니다. 지시문을 추가해 주세요.{hint}",
+                )
+                return
+
+            ctx.log(
+                f"{self._unknown_quest_timeout:.0f}초 동안 알아보지 못했습니다 "
+                f"({self._unknown_rounds}/{self._max_unknown_rounds}). "
+                "퀘스트확인부터 다시 봅니다."
             )
+            self._unknown_quest_since = None
+            self._panel_reader.reset()
+            self._enter(MainState.CHECK)
             return
 
         ctx.log(
             f"등록되지 않은 퀘스트입니다. {self._unknown_quest_retry:.0f}초 뒤 다시 확인합니다 "
-            f"({elapsed:.0f}/{self._unknown_quest_timeout:.0f}초)"
+            f"({elapsed:.0f}/{self._unknown_quest_timeout:.0f}초, "
+            f"{self._unknown_rounds + 1}/{self._max_unknown_rounds}회차)"
         )
         if not ctx.sleep(self._unknown_quest_retry):
             return
@@ -323,6 +357,7 @@ class QuestMachine:
         남아, 다음에 모르는 퀘스트가 한 번만 나와도 곧바로 상한을 넘긴다.
         """
         self._unknown_quest_since = None
+        self._unknown_rounds = 0
 
     def _on_unknown_reading(self, ctx: Context, reading: PanelReading) -> None:
         """퀘스트창을 못 읽었을 때.
