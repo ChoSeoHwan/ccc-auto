@@ -44,13 +44,14 @@ POPUP_TIMEOUT = 5.0
 """상자를 누르고 상세 팝업이 뜨기까지 한 번에 기다릴 상한."""
 
 USE_ATTEMPTS = 3
-"""'사용하기' 버튼을 못 찾았을 때 다시 볼 횟수.
+"""상자를 골라 상세 팝업을 열어 볼 횟수.
 
-한 번 못 찾았다고 바로 접으면, 팝업이 늦게 뜨는 순간마다 퀘스트가 막힌다.
+'사용하기' 가 안 보이는 건 대개 팝업이 늦게 떠서가 아니라 **상자 탭이 빗나가
+팝업 자체가 안 열려서**다. 그래서 기다리기만 하지 않고 상자 선택부터 되풀이한다.
 """
 
 USE_RETRY_INTERVAL = 1.0
-"""다시 보기까지 쉴 시간."""
+"""다시 고르기까지 쉴 시간."""
 
 USE_TIMEOUT = 5.0
 """'사용하기' 를 누르고 결과 화면이 뜨기까지 기다릴 상한."""
@@ -93,21 +94,12 @@ class UseBoxFromBag(QuestDefinition):
         ctx.tap_rect(ctx.anchors.get(anchor_names.QUEST_PANEL))
 
         try:
-            box = ctx.wait_for_template(BOX_TEMPLATE, BAG_TIMEOUT, MATCH_THRESHOLD, BAG_GRID)
-            if box is None:
-                return StepResult.blocked("가방에서 보물상자를 찾지 못했습니다")
-
-            ctx.log(f"보물상자 선택 (일치도 {box.score:.2f})")
-            ctx.tap_match(box)
-
-            use = self._find_use_button(ctx)
+            use, reason = self._open_use_popup(ctx)
         except TemplateError as exc:
             return StepResult.blocked(str(exc))
 
         if use is None:
-            return StepResult.blocked(
-                f"상세 팝업의 '사용하기' 버튼을 {USE_ATTEMPTS}번 확인했지만 찾지 못했습니다"
-            )
+            return StepResult.blocked(reason)
 
         ctx.log(f"'사용하기' 클릭 (일치도 {use.score:.2f})")
         ctx.tap_match(use)
@@ -118,23 +110,35 @@ class UseBoxFromBag(QuestDefinition):
         return StepResult.ok()
 
     # ------------------------------------------------------------------
-    def _find_use_button(self, ctx: Context):
-        """'사용하기' 버튼을 최대 ``USE_ATTEMPTS`` 번 확인한다.
+    def _open_use_popup(self, ctx: Context) -> tuple[object | None, str]:
+        """상자를 골라 상세 팝업을 연다. ``(사용하기 버튼, 실패 사유)``.
 
-        상세 팝업이 뜨는 데 걸리는 시간이 들쭉날쭉해서, 한 번의 상한만으로는
-        늦게 뜨는 날에 그대로 막힌다. 못 찾으면 1초 쉬고 다시 본다.
+        '사용하기' 가 안 보이면 그 자리에서 더 기다리지 않는다. 상자 탭이
+        빗나가 팝업이 아예 안 열린 경우가 대부분이라, 기다려 봐야 달라지는
+        게 없다. 상자를 다시 찾아 누르는 것부터 되풀이한다.
         """
         for attempt in range(1, USE_ATTEMPTS + 1):
-            match = ctx.wait_for_template(
+            box = ctx.wait_for_template(BOX_TEMPLATE, BAG_TIMEOUT, MATCH_THRESHOLD, BAG_GRID)
+            if box is None:
+                return None, "가방에서 보물상자를 찾지 못했습니다"
+
+            ctx.log(
+                f"보물상자 선택 ({attempt}/{USE_ATTEMPTS}, 일치도 {box.score:.2f})"
+            )
+            ctx.tap_match(box)
+
+            use = ctx.wait_for_template(
                 USE_TEMPLATE, POPUP_TIMEOUT, MATCH_THRESHOLD, USE_SEARCH
             )
-            if match is not None:
-                return match
+            if use is not None:
+                return use, ""
+
             if attempt < USE_ATTEMPTS:
                 ctx.log(
-                    f"'사용하기' 버튼이 아직 안 보입니다 ({attempt}/{USE_ATTEMPTS}). "
-                    f"{USE_RETRY_INTERVAL:.0f}초 뒤 다시 확인합니다."
+                    f"'사용하기' 버튼이 안 보입니다. 상자를 다시 골라 봅니다 "
+                    f"({attempt}/{USE_ATTEMPTS})"
                 )
                 if not ctx.sleep(USE_RETRY_INTERVAL):
-                    return None
-        return None
+                    return None, "정지 요청"
+
+        return None, f"상자를 {USE_ATTEMPTS}번 골라도 '사용하기' 버튼이 나오지 않았습니다"
