@@ -23,6 +23,9 @@ log = logging.getLogger(__name__)
 RED_RATIO_THRESHOLD = 0.06
 """이 비율을 넘으면 X 버튼이 있다고 본다."""
 
+MAX_CLOSE_CLICKS = 6
+"""전투화면까지 돌아가려고 X 를 누를 최대 횟수. 화면이 여러 겹 쌓일 수 있다."""
+
 _LOW_RED = ((0, 110, 80), (12, 255, 255))
 _HIGH_RED = ((168, 110, 80), (179, 255, 255))
 
@@ -40,7 +43,7 @@ class BattleScreenNavigator:
     def __init__(
         self,
         close_area: NormRect,
-        max_clicks: int = 6,
+        max_clicks: int = MAX_CLOSE_CLICKS,
         wait_after_click: float = 1.5,
         poll_interval: float = 0.25,
         threshold: float = RED_RATIO_THRESHOLD,

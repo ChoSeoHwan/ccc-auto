@@ -16,6 +16,19 @@ from ..quest import (
     QuestRegistry,
     StablePanelReader,
 )
+
+# 기본값은 상태기 쪽에 한 번만 적는다. 여기에 숫자를 다시 쓰면 두 곳이 어긋나
+# 상수를 고쳐도 안 먹는 일이 생긴다 (실제로 MAX_UNKNOWN_READS 가 그랬다).
+from ..quest.machine import (
+    MAX_CONSECUTIVE_FAILURES,
+    MAX_CONSECUTIVE_RETRIES,
+    MAX_UNKNOWN_READS,
+    MAX_UNKNOWN_ROUNDS,
+    UNKNOWN_QUEST_RETRY,
+    UNKNOWN_QUEST_TIMEOUT,
+)
+from ..quest.navigator import MAX_CLOSE_CLICKS
+from ..quest.panel import STABLE_FRAMES
 from .base import AutomationModule
 
 
@@ -62,11 +75,11 @@ class QuestAutomation(AutomationModule):
                 ctx.anchors.get(anchor_names.QUEST_PANEL_SAMPLE),
                 panel_area=panel_area,
             ),
-            required=ctx.option("stable_frames", 2),
+            required=ctx.option("stable_frames", STABLE_FRAMES),
         )
         navigator = BattleScreenNavigator(
             ctx.anchors.get(anchor_names.NAV_CLOSE),
-            max_clicks=ctx.option("max_close_clicks", 6),
+            max_clicks=ctx.option("max_close_clicks", MAX_CLOSE_CLICKS),
         )
         self.machine = QuestMachine(
             reader,
@@ -75,12 +88,12 @@ class QuestAutomation(AutomationModule):
             panel_area,
             ctx.anchors.get(anchor_names.SAFE_TAP),
             ctx.notifier,
-            max_failures=ctx.option("max_failures", 3),
-            max_retries=ctx.option("max_retries", 10),
-            max_unknown_reads=ctx.option("max_unknown_reads", 20),
-            unknown_quest_retry=ctx.option("unknown_quest_retry", 2.0),
-            unknown_quest_timeout=ctx.option("unknown_quest_timeout", 30.0),
-            max_unknown_rounds=ctx.option("max_unknown_rounds", 3),
+            max_failures=ctx.option("max_failures", MAX_CONSECUTIVE_FAILURES),
+            max_retries=ctx.option("max_retries", MAX_CONSECUTIVE_RETRIES),
+            max_unknown_reads=ctx.option("max_unknown_reads", MAX_UNKNOWN_READS),
+            unknown_quest_retry=ctx.option("unknown_quest_retry", UNKNOWN_QUEST_RETRY),
+            unknown_quest_timeout=ctx.option("unknown_quest_timeout", UNKNOWN_QUEST_TIMEOUT),
+            max_unknown_rounds=ctx.option("max_unknown_rounds", MAX_UNKNOWN_ROUNDS),
             on_change=self._remember_status,
         )
         self.machine.start()
