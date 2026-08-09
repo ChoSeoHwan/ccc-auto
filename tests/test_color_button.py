@@ -19,8 +19,11 @@ pytestmark = pytest.mark.no_frames
 WIDTH, HEIGHT = 506, 898
 BAND = NormRect(0.20, 0.83, 0.78, 0.10)
 
-ORANGE = (40, 140, 245)
-"""실측한 버튼 색 (BGR). HSV 로는 h=17 s=214 v=245 라 주황 범위 한가운데다."""
+ORANGE = (40, 163, 245)
+"""실측한 버튼 색 (BGR). HSV 로 H=18 이라 실제 버튼과 같은 색상이다."""
+
+RED_CLOSE = (40, 95, 245)
+"""하단 닫기(X) 버튼 색 (BGR). HSV 로 H=8 — 실측한 X 버튼과 같은 붉은 주황이다."""
 
 
 def blank() -> np.ndarray:
@@ -93,6 +96,27 @@ def test_둘_이상이면_큰_쪽을_고른다():
 
     assert rect is not None
     assert rect.center[0] == pytest.approx(0.693, abs=0.01)
+
+
+def test_바로_아래_닫기_버튼에_이어_붙지_않는다():
+    """화면이 위로 밀리면 붉은 X 가 띠 아래끝에 걸친다.
+
+    색상 하한이 낮으면 X 까지 같은 색으로 잡히고, 덩어리를 메우는 과정에서
+    버튼과 **한 덩어리로 이어져** 경계 사각형이 부풀고 채움이 무너진다. 그러면
+    버튼을 통째로 놓친다 — 실제로 그 때문에 '정리하기' 확인창 앞에서 재료
+    부족으로 오진하고 자동화가 멈췄다(10:23:02).
+
+    자리는 그때 화면에서 그대로 옮겼다. 버튼 아래끝 814, X 위끝 820 이다.
+    """
+    frame = blank()
+    draw_button(frame, 286, 770, 176, 44)
+    cv2.rectangle(frame, (248, 820), (308, 860), RED_CLOSE, -1)
+
+    rect = find_color_button(frame, BUTTON_ORANGE, BAND)
+
+    assert rect is not None, "X 와 이어 붙어 버튼을 놓쳤습니다"
+    assert rect.h < 0.06, f"X 까지 이어 붙었습니다 (높이 {rect.h:.3f})"
+    assert rect.center == pytest.approx((0.740, 0.883), abs=0.01)
 
 
 def test_창_크기가_달라도_같게_찾는다():
