@@ -379,6 +379,10 @@ class OvenEquipmentDraw(QuestDefinition):
         눌러 볼 것을 눌러 보지도 못하고 재료 부족으로 오진한다. 정리 화면은
         퀘스트창까지 가리지 않아서, 퀘스트창을 먼저 보면 아직 '정리 하기' 가
         떠 있는데도 다 끝난 줄 알고 나가 버린다.
+
+        **정리를 한 판은 실패가 아니다.** 정리하느라 이번 판의 뽑기는 돌지
+        않지만, 자리가 생겼으니 다음 판은 정상으로 돌아간다. 그런데도 재료
+        부족으로 알리면 사람을 헛되이 부르고 실패 3회를 향해 쌓인다.
         """
         panel_area = ctx.anchors.get(anchor_names.QUEST_PANEL)
         safe_tap = ctx.anchors.get(anchor_names.SAFE_TAP)
@@ -409,6 +413,13 @@ class OvenEquipmentDraw(QuestDefinition):
                 return StepResult.ok()
 
             if navigator.has_close_button(ctx.frame):
+                if tidy_taps:
+                    # 이번 판은 뽑기가 아니라 정리에 썼다. 정리를 마치면 자리가
+                    # 생겨 다음 판은 정상으로 돌아가므로 실패로 세지 않는다.
+                    # 여기서 '재료 부족' 으로 알리면 사람을 헛되이 부른다.
+                    return StepResult.retry(
+                        f"장비를 정리했습니다 ({tidy_taps}회). 다시 확인합니다"
+                    )
                 return StepResult.blocked(
                     "자동 열기가 시작되지 않았습니다. 재료가 부족할 수 있습니다"
                 )

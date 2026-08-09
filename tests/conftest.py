@@ -239,6 +239,16 @@ def then_success(world):
 def then_blocked_with(world, needle: str):
     result = world["result"]
     assert not result.success, "성공으로 끝났습니다"
+    assert not result.retryable, f"재시도로 끝났습니다: {result.reason}"
+    assert needle in result.reason, f"사유: {result.reason}"
+
+
+@then(parsers.re(r'재시도가 되고 사유에 "(?P<needle>[^"]+)" (?:가|이) 들어 있다'))
+def then_retry_with(world, needle: str):
+    """기다리면 풀릴 실패. 사람을 부르지 않고 처음부터 다시 본다."""
+    result = world["result"]
+    assert not result.success, "성공으로 끝났습니다"
+    assert result.retryable, f"진행 불가로 끝났습니다: {result.reason}"
     assert needle in result.reason, f"사유: {result.reason}"
 
 
