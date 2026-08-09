@@ -33,7 +33,9 @@
 **Auto 버튼이 안 보이는 경우.** 이미 돌고 있으면 버튼이 노란색으로 바뀌고, 장비
 자동 분해 팝업까지 겹쳐서 그 상태를 알아보기가 어렵다. 그래서 켜진 버튼을 따로
 알아보려 하지 않는다. 청록색 버튼이 다시 보일 때까지 기다리기만 하고, 30초 안에
-안 보이면 퀘스트확인부터 다시 본다.
+안 보이면 퀘스트확인부터 다시 본다. 기다리는 동안에도 퀘스트 완료와 정리하기
+팝업을 함께 본다 — 팝업이 오븐과 퀘스트창을 같이 가리면 둘 다 영영 안 보여서,
+치울 수 있는 화면을 앞에 두고 30초를 통째로 버리기 때문이다.
 """
 
 from __future__ import annotations
@@ -213,6 +215,11 @@ class OvenEquipmentDraw(QuestDefinition):
 
         버튼만 보고 있으면 그사이 뽑기가 다 끝나 퀘스트가 완료돼도 남은 시간을
         그대로 버린다. 그래서 볼 때마다 퀘스트창도 같이 읽는다.
+
+        **정리하기 팝업도 같이 본다.** 장비가 가득 차면 그 팝업이 오븐과
+        퀘스트창을 함께 가려서, Auto 버튼도 완료도 영영 보이지 않는다. 그러면
+        치울 수 있는 화면을 앞에 두고 30초를 통째로 버린다. 보이면 눌러 치우고
+        계속 기다린다 — 다음 확인은 3초 뒤라 화면이 넘어갈 틈은 넉넉하다.
         """
         ctx.log(
             f"Auto 버튼이 안 보입니다. {AUTO_POLL:.0f}초 간격으로 "
@@ -224,8 +231,10 @@ class OvenEquipmentDraw(QuestDefinition):
         )
         found: list = []
         done: list = []
+        tidy_taps = 0
 
         def settled(frame) -> bool:
+            nonlocal tidy_taps
             match = ctx.find(AUTO_TEMPLATE, AUTO_THRESHOLD, AUTO_SEARCH)
             if match is not None:
                 found.append(match)
@@ -233,6 +242,16 @@ class OvenEquipmentDraw(QuestDefinition):
             if reader.read(frame).state is PanelState.GOLD:
                 done.append(True)
                 return True
+
+            if tidy_taps < MAX_TIDY_TAPS:
+                rect = find_color_button(frame, BUTTON_ORANGE, BUTTON_BAND)
+                if rect is not None:
+                    tidy_taps += 1
+                    ctx.log(
+                        f"기다리는 사이 정리하기 팝업이 가리고 있습니다. 눌러서 치웁니다 "
+                        f"({tidy_taps}/{MAX_TIDY_TAPS}, 중심 {rect.center[0]:.3f})"
+                    )
+                    ctx.tap_rect(rect)
             return False
 
         ctx.wait_until(settled, AUTO_WAIT_TIMEOUT, interval=AUTO_POLL)
