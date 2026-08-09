@@ -23,8 +23,15 @@ log = logging.getLogger(__name__)
 RED_RATIO_THRESHOLD = 0.06
 """이 비율을 넘으면 X 버튼이 있다고 본다."""
 
-MAX_CLOSE_CLICKS = 6
+MAX_CLOSE_CLICKS = 20
 """전투화면까지 돌아가려고 X 를 누를 최대 횟수. 화면이 여러 겹 쌓일 수 있다."""
+
+CLOSE_WAIT = 1.0
+"""X 를 누른 뒤 화면이 바뀌기를 기다릴 **상한**. 바뀌면 즉시 넘어간다.
+
+상한이지 대기 시간이 아니다. 다만 팝업이 닫히는 연출이 이보다 길면 그만큼을
+매번 다 태우게 되므로, 짧게 잡고 대신 누르는 횟수를 넉넉히 둔다.
+"""
 
 _LOW_RED = ((0, 110, 80), (12, 255, 255))
 _HIGH_RED = ((168, 110, 80), (179, 255, 255))
@@ -44,7 +51,7 @@ class BattleScreenNavigator:
         self,
         close_area: NormRect,
         max_clicks: int = MAX_CLOSE_CLICKS,
-        wait_after_click: float = 1.5,
+        wait_after_click: float = CLOSE_WAIT,
         poll_interval: float = 0.25,
         threshold: float = RED_RATIO_THRESHOLD,
     ):

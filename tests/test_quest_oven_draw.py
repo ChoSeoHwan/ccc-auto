@@ -12,12 +12,12 @@ from ccc.geometry import NormRect
 from ccc.quests.oven_equipment_draw import (
     AUTO_SEARCH,
     AUTO_TEMPLATE,
-    START_SEARCH,
-    START_TEMPLATE,
+    BUTTON_BAND,
     OvenEquipmentDraw,
 )
+from ccc.vision import BUTTON_ORANGE
 
-from .conftest import inside, tap_normalized, template_area
+from .conftest import color_button_area, inside, tap_normalized, template_area
 
 scenarios("features/quest_oven_draw.feature")
 
@@ -34,7 +34,11 @@ def quest() -> OvenEquipmentDraw:
 def tap_targets(anchors) -> dict:
     return {
         "Auto 버튼": template_area("battle_gray_oven", AUTO_TEMPLATE, AUTO_SEARCH, 0.80),
-        "시작 버튼": template_area("auto_open_popup", START_TEMPLATE, START_SEARCH, 0.85),
+        "시작 버튼": color_button_area("auto_open_popup", BUTTON_ORANGE, BUTTON_BAND),
+        "정리 하기 버튼": color_button_area("equipment_full_list", BUTTON_ORANGE, BUTTON_BAND),
+        "정리하기 확인 버튼": color_button_area(
+            "equipment_full_confirm", BUTTON_ORANGE, BUTTON_BAND
+        ),
         "빈 곳 탭 지점": lambda: anchors.get("safe_tap"),
     }
 

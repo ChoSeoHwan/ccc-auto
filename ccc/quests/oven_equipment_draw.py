@@ -7,11 +7,20 @@
 
 수행 절차 (실측으로 확인한 순서)
     1. 오븐 왼쪽 아래의 Auto 버튼을 누른다.       → '자동 열기' 팝업이 뜬다
-    2. 팝업의 주황색 '시작' 버튼을 누른다.        → 팝업이 스스로 닫히고 뽑기 시작
+    2. 팝업 아래쪽의 주황 버튼을 누른다.          → 팝업이 스스로 닫히고 뽑기 시작
     3. 뽑힌 장비 비교 팝업을 빈 곳 탭으로 닫는다. → 이 팝업에는 X 버튼이 없다
 
 3단계 팝업은 '장착 / 판매' 버튼을 갖고 있지만 어느 쪽도 누르지 않는다.
 빈 곳을 누르면 아무 선택 없이 닫히고 장비는 가방에 남는다.
+
+**2단계를 글자로 읽지 않는 이유.** 그 자리에 뜨는 버튼은 보통 '시작' 이지만,
+장비가 30개(최대)로 차 있으면 대신 '정리하기' 가 뜬다. 어느 쪽이든 눌러야 할
+버튼은 그 하나뿐이라 글자를 가릴 이유가 없다. 그래서 템플릿 대신 **주황색**
+으로 찾는다. 버튼 위로 흘러가는 띠에도 색은 흔들리지 않는다.
+
+**장비가 가득 찼을 때.** '정리하기' → 자동 열기 결과 목록의 '정리 하기' →
+확인창의 '정리하기' 순으로 주황 버튼이 이어진다. 셋 다 같은 자리·같은 색이라
+같은 방법으로 눌러 나가면 정리가 끝나고 다시 뽑을 수 있게 된다.
 
 **재료가 모자랄 때.** 행운반죽이 없으면 '시작' 을 눌러도 뽑기가 돌지 않고
 '아이템이 부족합니다' 안내가 뜬다. 이 팝업에는 X 가 있어서 빈 곳 탭으로는
@@ -42,12 +51,11 @@ from ..quest.navigator import BattleScreenNavigator
 from ..quest.panel import QuestPanelReader, panel_visible
 from ..quest.states import PanelState
 from ..templates_spec import NUMBER_TIP, SIZE_TIP, TemplateSpec
-from ..vision import TemplateError, find
+from ..vision import BUTTON_ORANGE, TemplateError, find, find_color_button
 
 log = logging.getLogger(__name__)
 
 AUTO_TEMPLATE = "oven_auto"
-START_TEMPLATE = "oven_auto_start"
 LEVELUP_TEMPLATE = "oven_levelup"
 GROW_TEMPLATE = "oven_grow"
 
@@ -58,11 +66,18 @@ AUTO_SEARCH = NormRect(0.18, 0.82, 0.40, 0.12)
 고정 좌표로 누르지 않고 이 범위 안에서 찾아서 누른다.
 """
 
-START_SEARCH = NormRect(0.20, 0.82, 0.60, 0.10)
-"""'시작' 버튼을 찾을 범위. 실측 중심 (0.499, 0.882)."""
+BUTTON_BAND = NormRect(0.20, 0.83, 0.78, 0.10)
+"""주황 버튼이 놓이는 띠. 팝업마다 좌우 위치가 달라 가로로 넓게 잡는다.
+
+실측 (506x898 화면)
+    시작        x 0.332~0.667
+    정리 하기   x 0.378~0.712   (자동 열기 결과 목록)
+    정리하기    x 0.512~0.874   (확인창, 왼쪽에 청록 '그만두기')
+세로는 셋 다 0.855~0.909 로 같다. 왼쪽 끝 0.20 아래는 전투화면의 주황
+잡동사니가 있는 자리라 일부러 뺐다.
+"""
 
 AUTO_THRESHOLD = 0.80
-START_THRESHOLD = 0.85
 LEVELUP_THRESHOLD = 0.80
 GROW_THRESHOLD = 0.80
 
@@ -102,6 +117,16 @@ LEVELUP_SHOT_DELAY = 1.2
 
 POPUP_TIMEOUT = 5.0
 """Auto 를 누르고 '자동 열기' 팝업이 뜨기까지 기다릴 상한."""
+
+TIDY_TIMEOUT = 5.0
+"""'정리 하기' 를 누르고 화면이 넘어가기를 기다릴 상한."""
+
+MAX_TIDY_TAPS = 4
+"""주황 버튼을 이어서 누를 최대 횟수.
+
+정리는 '정리하기 → 정리 하기 → 정리하기' 세 번이면 끝난다. 한 번의 여유를
+두되 그 이상은 같은 버튼을 헛누르고 있는 것이니 멈춘다.
+"""
 
 AUTO_POLL = 3.0
 """Auto 버튼이 다시 보이는지 확인할 간격. 몇 분씩 걸리는 일이라 자주 볼 이유가 없다."""
@@ -143,14 +168,9 @@ class OvenEquipmentDraw(QuestDefinition):
             tips=("꺼져 있는 상태를 잡는다. 돌고 있으면 노란색이라 걸리지 않는다.",),
             default_area=NormRect(0.3208, 0.8896, 0.0733, 0.0167),
         ),
-        TemplateSpec(
-            name=START_TEMPLATE,
-            label="오븐 auto 내 시작 버튼",
-            where="Auto 버튼을 누르면 뜨는 '자동 열기' 팝업",
-            what="주황색 '시작' 버튼 전체",
-            default_area=NormRect(0.3315, 0.8552, 0.3352, 0.0526),
-        ),
     ]
+    # '시작' 버튼은 템플릿을 두지 않는다. 같은 자리에 '정리하기' 가 대신 뜨는
+    # 경우가 있어 글자로 가리면 그때마다 막힌다. 색으로 찾는다.
 
     def execute(self, ctx: Context) -> StepResult:
         result = self._start_auto(ctx)
@@ -182,7 +202,7 @@ class OvenEquipmentDraw(QuestDefinition):
 
         ctx.log(f"Auto 버튼 클릭 (일치도 {match.score:.2f})")
         ctx.tap_match(match)
-        return self._press_start(ctx)
+        return self._press_confirm(ctx)
 
     def _wait_for_auto(self, ctx: Context) -> tuple[object | None, bool]:
         """Auto 버튼이 다시 보이기를 기다린다. ``(찾은 것, 완료됐는지)``.
@@ -290,20 +310,51 @@ class OvenEquipmentDraw(QuestDefinition):
         if saved:
             ctx.log(f"화면 저장: {saved}")
 
-    def _press_start(self, ctx: Context) -> StepResult:
-        try:
-            match = ctx.wait_for_template(
-                START_TEMPLATE, POPUP_TIMEOUT, START_THRESHOLD, START_SEARCH
-            )
-        except TemplateError as exc:
-            return StepResult.blocked(str(exc))
+    def _press_confirm(self, ctx: Context) -> StepResult:
+        """'자동 열기' 팝업의 주황 버튼을 누른다.
 
-        if match is None:
-            return StepResult.blocked("'자동 열기' 팝업의 시작 버튼을 찾지 못했습니다")
+        보통은 '시작' 이고, 장비가 가득 차 있으면 '정리하기' 다. 글자를 가리지
+        않고 색으로 찾아 누른다 — 어느 쪽이든 눌러야 할 버튼은 그것 하나다.
+        """
+        rect = self._wait_for_button(ctx, POPUP_TIMEOUT)
+        if rect is None:
+            return StepResult.blocked("'자동 열기' 팝업의 시작/정리하기 버튼을 찾지 못했습니다")
 
-        ctx.log(f"'시작' 클릭 (일치도 {match.score:.2f})")
-        ctx.tap_match(match)
+        ctx.log(f"주황 버튼 클릭 (중심 {rect.center[0]:.3f}, {rect.center[1]:.3f})")
+        self._tap_button(ctx, rect)
         return StepResult.ok()
+
+    def _wait_for_button(self, ctx: Context, timeout: float) -> NormRect | None:
+        """주황 버튼이 띠 안에 나타나기를 기다렸다가 그 자리를 돌려준다."""
+        found: list[NormRect] = []
+
+        def appeared(frame) -> bool:
+            rect = find_color_button(frame, BUTTON_ORANGE, BUTTON_BAND)
+            if rect is None:
+                return False
+            found.append(rect)
+            return True
+
+        ctx.wait_until(appeared, timeout)
+        return found[0] if found else None
+
+    def _tap_button(self, ctx: Context, rect: NormRect) -> None:
+        """버튼을 누르고, 그 버튼이 **그 자리에서** 없어질 때까지 기다린다.
+
+        '없어질 때까지' 가 아니라 '그 자리에서' 인 것이 중요하다. 정리 과정은
+        같은 띠의 좌우 다른 자리에 다음 버튼을 띄우므로, 버튼의 유무만 보면
+        다음 화면의 버튼을 보고 아직 안 넘어갔다고 착각한다.
+
+        기다리지 않고 돌아가면 방금 누른 버튼이 화면에 남아 있는 동안 다음
+        검사가 돌아 같은 버튼을 또 누른다.
+        """
+        ctx.tap_rect(rect)
+
+        def moved(frame) -> bool:
+            now = find_color_button(frame, BUTTON_ORANGE, BUTTON_BAND)
+            return now is None or not now.near(rect)
+
+        ctx.wait_until(moved, TIDY_TIMEOUT)
 
     def _dismiss_results(self, ctx: Context) -> StepResult:
         """뽑힌 장비 팝업을 빈 곳 탭으로 치우며 뽑기가 끝나기를 기다린다.
@@ -319,34 +370,53 @@ class OvenEquipmentDraw(QuestDefinition):
 
         X 가 없는 채로 상한까지 못 치웠을 때는 진행 불가로 보지 않는다.
         퀘스트창이 다시 보이면 상태기가 완료 여부를 직접 확인하기 때문이다.
+
+        검사 순서가 곧 규칙이다.
+
+            레벨업 확인창 → 주황 버튼 → 퀘스트창 → X → 빈 곳 탭
+
+        레벨업 확인창과 정리 화면에는 하단 X 가 같이 보인다. X 를 먼저 보면
+        눌러 볼 것을 눌러 보지도 못하고 재료 부족으로 오진한다. 정리 화면은
+        퀘스트창까지 가리지 않아서, 퀘스트창을 먼저 보면 아직 '정리 하기' 가
+        떠 있는데도 다 끝난 줄 알고 나가 버린다.
         """
         panel_area = ctx.anchors.get(anchor_names.QUEST_PANEL)
         safe_tap = ctx.anchors.get(anchor_names.SAFE_TAP)
         navigator = BattleScreenNavigator(ctx.anchors.get(anchor_names.NAV_CLOSE))
+        tidy_taps = 0
+        empty_taps = 0
 
         def panel_back(frame) -> bool:
             return panel_visible(frame, panel_area)
 
-        for attempt in range(DISMISS_ROUNDS):
-            if panel_back(ctx.frame):
-                if attempt:
-                    ctx.log(f"결과 팝업 정리 완료 ({attempt}회 탭)")
-                return StepResult.ok()
-
-            # 레벨업 확인창 검사가 X 검사보다 먼저다. 이 창에도 하단 X 가 보여서
-            # 순서를 바꾸면 레벨업을 해 보지도 못하고 진행 불가로 빠진다.
+        for _ in range(DISMISS_ROUNDS):
             if self._take_levelup_offer(ctx):
                 return StepResult.ok()
 
-            # 첫 판은 봐 준다. 시작 직후에는 아직 연출이 돌고 있을 수 있다.
-            if attempt and navigator.has_close_button(ctx.frame):
+            rect = find_color_button(ctx.frame, BUTTON_ORANGE, BUTTON_BAND)
+            if rect is not None and tidy_taps < MAX_TIDY_TAPS:
+                tidy_taps += 1
+                ctx.log(
+                    f"'정리 하기' 를 눌러 장비를 정리합니다 "
+                    f"({tidy_taps}/{MAX_TIDY_TAPS}, 중심 {rect.center[0]:.3f})"
+                )
+                self._tap_button(ctx, rect)
+                continue
+
+            if panel_back(ctx.frame):
+                if empty_taps:
+                    ctx.log(f"결과 팝업 정리 완료 (빈 곳 {empty_taps}회 탭)")
+                return StepResult.ok()
+
+            if navigator.has_close_button(ctx.frame):
                 return StepResult.blocked(
                     "자동 열기가 시작되지 않았습니다. 재료가 부족할 수 있습니다"
                 )
 
             ctx.tap_rect(safe_tap)
+            empty_taps += 1
             if ctx.wait_until(panel_back, DISMISS_TIMEOUT):
-                ctx.log(f"결과 팝업 정리 완료 ({attempt + 1}회 탭)")
+                ctx.log(f"결과 팝업 정리 완료 (빈 곳 {empty_taps}회 탭)")
                 return StepResult.ok()
             if ctx.stopping:
                 return StepResult.ok()

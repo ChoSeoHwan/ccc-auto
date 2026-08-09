@@ -76,6 +76,16 @@ class NormRect:
             round(self.h * height),
         )
 
+    def near(self, other: "NormRect", tolerance: float = 0.01) -> bool:
+        """두 사각형의 중심이 사실상 같은 자리인지.
+
+        같은 버튼을 다시 본 것인지, 다른 버튼으로 바뀐 것인지 가릴 때 쓴다.
+        찾은 자리는 프레임마다 1~2px 씩 흔들리므로 딱 맞기를 요구하면 안 된다.
+        """
+        x1, y1 = self.center
+        x2, y2 = other.center
+        return abs(x1 - x2) <= tolerance and abs(y1 - y2) <= tolerance
+
     def to_dict(self) -> dict[str, float]:
         return {"x": self.x, "y": self.y, "w": self.w, "h": self.h}
 

@@ -404,10 +404,9 @@ class QuestMachine:
     def _on_unknown_reading(self, ctx: Context, reading: PanelReading) -> None:
         """퀘스트창을 못 읽었을 때 — 빈 곳을 눌러 연출을 넘긴다.
 
-        여기까지 왔다는 건 X 버튼이 없다는 뜻이다(있으면 상태기가 먼저 눌러
-        치운다). X 도 없는데 퀘스트창도 안 보이면 레벨업 축하처럼 '화면을
-        탭하세요' 로 넘기는 전체화면 연출이다. 빠져나올 길은 빈 곳을 누르는
-        것뿐이므로, 못 읽을 때마다 한 번씩 2초 간격으로 최대 10번 누른다.
+        X 도 없는데 퀘스트창도 안 보이면 레벨업 축하처럼 '화면을 탭하세요' 로
+        넘기는 전체화면 연출이다. 빠져나올 길은 빈 곳을 누르는 것뿐이므로,
+        못 읽을 때마다 한 번씩 2초 간격으로 최대 10번 누른다.
 
         그래도 안 넘어가면 빈 곳 탭으로는 못 치우는 화면이거나 영역 보정이
         어긋난 것이다. 그때는 화면을 남기고 알린 뒤 대기로 멈춘다.
@@ -416,6 +415,9 @@ class QuestMachine:
             # 못 읽은 게 아니라 연속 확인이 한 번 모자랄 뿐이다. 다음 프레임이면
             # 확정된다. 이걸 실패로 세고 빈 곳을 누르면 판독기가 초기화되어
             # 영영 확정되지 못하고, 색이 또렷한데도 20번을 헛누르게 된다.
+            return
+
+        if self._popup_arrived(ctx):
             return
 
         self._unknown_reads += 1
@@ -431,6 +433,24 @@ class QuestMachine:
             "퀘스트창을 계속 읽지 못했습니다. 영역 보정이 필요하거나 "
             f"빈 곳 탭으로 넘어가지 않는 화면일 수 있습니다.{hint}",
         )
+
+    def _popup_arrived(self, ctx: Context) -> bool:
+        """빈 곳을 누르기 직전에 화면을 다시 보고, X 있는 팝업이 떴는지 확인한다.
+
+        이 걸음을 시작할 때는 분명 전투화면이었다. 그 뒤 보상 팝업이나 상자
+        결과창이 올라오는 데 1~2초가 걸려서, 걸음 첫머리에 찍은 프레임만 믿고
+        누르면 **X 가 버젓이 있는 화면을 빈 곳 탭으로 두드리게 된다.** 실제
+        기록에서도 09:31:51 에 빈 곳을 누르고 2초 뒤에야 X 를 발견했다.
+
+        X 가 있으면 아무것도 하지 않는다. 다음 걸음의 전투화면 복귀가 X 를
+        눌러 치운다. 헛누른 것이 아니니 실패로도 세지 않는다.
+        """
+        ctx.refresh()
+        if not self._navigator.has_close_button(ctx.frame):
+            return False
+        log.debug("빈 곳을 누르려던 참에 X 있는 팝업을 발견했다. 다음 걸음에 맡긴다.")
+        self._panel_reader.reset()
+        return True
 
     def _tap_through_overlay(self, ctx: Context, reading: PanelReading) -> None:
         ctx.log(

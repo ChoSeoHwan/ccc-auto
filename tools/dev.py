@@ -31,6 +31,7 @@ from ccc.anchors import AnchorSet  # noqa: E402
 from ccc.app import AppError, AutomationApp  # noqa: E402
 from ccc.config import CAPTURE_DIR, Config  # noqa: E402
 from ccc.geometry import NormRect  # noqa: E402
+from ccc.vision import BUTTON_ORANGE  # noqa: E402
 
 DEFAULT_MODULES = [
     "power_save.ExitPowerSaveMode",
@@ -146,7 +147,9 @@ def cmd_goto_battle(args) -> int:
 
 
 COLORS: dict[str, tuple[tuple[int, int, int], tuple[int, int, int]]] = {
-    "orange": ((8, 150, 180), (25, 255, 255)),
+    # 주황은 자동화가 실제로 버튼을 찾을 때 쓰는 값 그대로다. 여기서 잰 자리가
+    # 운영에서도 그대로 잡히도록 같은 상수를 쓴다.
+    "orange": BUTTON_ORANGE,
     "gold": ((10, 110, 130), (40, 255, 255)),
     "teal": ((80, 60, 140), (105, 200, 255)),
     "red": ((0, 120, 90), (10, 255, 255)),

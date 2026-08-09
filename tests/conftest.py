@@ -52,12 +52,14 @@ def pytest_collection_modifyitems(config, items):
     """픽스처가 없으면 화면이 필요한 테스트를 건너뛴다.
 
     저장소를 갓 받은 사람도 `pytest` 가 빨간불 없이 돌아야 한다.
+    ``no_frames`` 를 단 테스트는 스스로 화면을 만들어 쓰므로 그대로 돌린다.
     """
     if has_frames():
         return
     skip = pytest.mark.skip(reason=SETUP_HINT)
     for item in items:
-        item.add_marker(skip)
+        if item.get_closest_marker("no_frames") is None:
+            item.add_marker(skip)
 
 
 def load_frame(name: str) -> np.ndarray:
@@ -284,5 +286,18 @@ def template_area(frame_name: str, template_name: str, search: NormRect, thresho
         match = find(load_frame(frame_name), store.load(template_name), threshold, search)
         assert match is not None, f"'{template_name}' 을 {frame_name} 에서 찾지 못했습니다"
         return match.rect
+
+    return resolve
+
+
+def color_button_area(frame_name: str, color, band: NormRect):
+    """픽스처 화면에서 색으로 버튼을 찾아 그 영역을 돌려주는 함수를 만든다."""
+
+    def resolve() -> NormRect:
+        from ccc.vision import find_color_button
+
+        rect = find_color_button(load_frame(frame_name), color, band)
+        assert rect is not None, f"{frame_name} 에서 색 버튼을 찾지 못했습니다"
+        return rect
 
     return resolve

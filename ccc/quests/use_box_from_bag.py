@@ -37,10 +37,10 @@ USE_SEARCH = NormRect(0.15, 0.35, 0.70, 0.15)
 
 MATCH_THRESHOLD = 0.75
 
-BAG_TIMEOUT = 6.0
+BAG_TIMEOUT = 2.0
 """퀘스트창을 누르고 가방이 열리기까지 기다릴 상한."""
 
-POPUP_TIMEOUT = 5.0
+POPUP_TIMEOUT = 2.0
 """상자를 누르고 상세 팝업이 뜨기까지 한 번에 기다릴 상한."""
 
 USE_ATTEMPTS = 3
