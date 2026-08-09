@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import logging
 import time
+
+import numpy as np
 from typing import Callable
 
 from ..context import Context
@@ -26,7 +28,8 @@ from .navigator import BattleScreenNavigator
 from .panel import PanelReading, StablePanelReader
 from .registry import QuestRegistry
 from .states import MainState, PanelState, ProgressStep
-from ..vision import TemplateError
+from ..vision import TemplateError, crop
+from ..vision.text import text_mask
 
 log = logging.getLogger(__name__)
 
@@ -47,10 +50,19 @@ MIN_SCORE_MARGIN = 0.08
 """
 
 CLAIM_TIMEOUT = 4.0
-"""보상을 누른 뒤 퀘스트창이 다음 것으로 바뀌기를 기다리는 제한 시간.
+"""보상을 누른 뒤 퀘스트창이 다음 것으로 바뀌기를 기다리는 제한 시간."""
 
-고정으로 재우면 빨리 바뀌어도 그만큼 손해다. 창이 더 이상 황금이 아니게
-되면 바로 넘어간다.
+CLAIM_TEXT_CHANGE = 0.05
+"""퀘스트창 글자가 이만큼 바뀌면 보상이 반영된 것으로 본다.
+
+'황금이 아니게 되기' 만 기다리면, **다음 퀘스트도 이미 완료 상태일 때** 창이
+계속 황금이라 조건이 서지 않는다. 그대로 상한 4초를 통째로 버린다
+(실측: 수령 09:16:32 → 다음 감지 09:16:36).
+
+그래서 색 대신 글자가 바뀌었는지도 함께 본다. 퀘스트가 넘어가면 이름과
+진행도가 같이 바뀌므로 확실한 신호다. 실측으로 같은 화면이 떠 있는 동안의
+프레임 간 변화율은 0.0000 이었고, 실제로 화면이 넘어간 순간은 0.3061 이었다.
+그 사이를 넉넉히 갈라 잡는다.
 """
 
 UNKNOWN_QUEST_RETRY = 2.0
@@ -73,17 +85,23 @@ MAX_UNKNOWN_ROUNDS = 3
 등록되지 않은 퀘스트다.
 """
 
-MAX_UNKNOWN_READS = 20
-"""퀘스트창을 이만큼 연속으로 못 읽으면 멈추고 알린다."""
+MAX_UNKNOWN_READS = 50
+"""빈 곳을 이만큼 눌러도 퀘스트창이 안 보이면 멈추고 알린다."""
 
-UNKNOWN_TAP_INTERVAL = 4
+UNKNOWN_TAP_INTERVAL = 1
 """판독 실패가 이만큼 쌓일 때마다 빈 곳을 한 번 탭한다.
 
-레벨업 연출처럼 X 버튼 없이 '화면을 탭하세요' 로 넘기는 전체화면 연출이
-퀘스트창을 가리면, 전투화면으로 인식되면서도 퀘스트창은 계속 안 보인다.
-버튼이 없는 지점을 눌러 연출을 넘긴다. 전투화면에서 눌려도 아무 일이
-없는 자리라 헛탭의 부작용이 없다.
+레벨업 연출처럼 **X 버튼 없이 '화면을 탭하세요' 로 넘기는 전체화면 연출**이
+퀘스트창을 가리면, X 가 없으니 전투화면으로 인식되면서도 퀘스트창은 계속
+안 보인다. 이럴 때 빠져나올 길은 빈 곳을 누르는 것뿐이다.
+
+1 이라 못 읽을 때마다 바로 누른다. 예전에는 4번에 한 번만 눌러서 연출 하나
+넘기는 데 판독 실패가 네 번씩 쌓였다. 누르는 자리는 버튼이 없는 전장
+한복판이라, 이미 전투화면인데 헛눌러도 아무 일이 없다.
 """
+
+UNKNOWN_TAP_WAIT = 2.0
+"""빈 곳을 누른 뒤 연출이 넘어가기를 기다리는 시간."""
 
 
 class QuestMachine:
@@ -217,18 +235,28 @@ class QuestMachine:
             return
 
         ctx.log("퀘스트 보상을 수령합니다.")
+        before = text_mask(crop(ctx.frame, self._panel_area))
         ctx.tap_rect(self._panel_area)
         # 수령하면 창이 다음 퀘스트로 바뀐다. 바뀌는 것을 보고 넘어간다.
-        ctx.wait_until(self._is_not_gold, CLAIM_TIMEOUT)
+        ctx.wait_until(lambda frame: self._claim_registered(frame, before), CLAIM_TIMEOUT)
 
         self._failures = 0
         self.current_quest = None
         self._panel_reader.reset()
         self._enter(MainState.CHECK)
 
-    def _is_not_gold(self, frame) -> bool:
-        """퀘스트창이 더 이상 완료 상태가 아닌지. 보상 수령이 반영됐다는 신호다."""
-        return self._panel_reader.reader.read(frame).state is not PanelState.GOLD
+    def _claim_registered(self, frame, before: np.ndarray) -> bool:
+        """보상 수령이 화면에 반영됐는지.
+
+        창이 더 이상 황금이 아니면 당연히 넘어간 것이다. 다음 퀘스트도 완료
+        상태라 계속 황금일 수 있으므로, 글자가 바뀌었는지도 함께 본다.
+        """
+        if self._panel_reader.reader.read(frame).state is not PanelState.GOLD:
+            return True
+        after = text_mask(crop(frame, self._panel_area))
+        if after.shape != before.shape:
+            return True
+        return np.count_nonzero(after != before) / after.size >= CLAIM_TEXT_CHANGE
 
     # ------------------------------------------------------------------
     # 퀘스트진행 세부 단계
@@ -374,13 +402,25 @@ class QuestMachine:
         self._unknown_rounds = 0
 
     def _on_unknown_reading(self, ctx: Context, reading: PanelReading) -> None:
-        """퀘스트창을 못 읽었을 때.
+        """퀘스트창을 못 읽었을 때 — 빈 곳을 눌러 연출을 넘긴다.
 
-        잠깐이면 그냥 넘긴다. 계속되면 전체화면 연출이 가리고 있을 수 있으니
-        빈 곳을 눌러 넘겨 보고, 그래도 안 되면 사용자에게 알리고 멈춘다.
+        여기까지 왔다는 건 X 버튼이 없다는 뜻이다(있으면 상태기가 먼저 눌러
+        치운다). X 도 없는데 퀘스트창도 안 보이면 레벨업 축하처럼 '화면을
+        탭하세요' 로 넘기는 전체화면 연출이다. 빠져나올 길은 빈 곳을 누르는
+        것뿐이므로, 못 읽을 때마다 한 번씩 2초 간격으로 최대 10번 누른다.
+
+        그래도 안 넘어가면 빈 곳 탭으로는 못 치우는 화면이거나 영역 보정이
+        어긋난 것이다. 그때는 화면을 남기고 알린 뒤 대기로 멈춘다.
         """
+        if reading.settling:
+            # 못 읽은 게 아니라 연속 확인이 한 번 모자랄 뿐이다. 다음 프레임이면
+            # 확정된다. 이걸 실패로 세고 빈 곳을 누르면 판독기가 초기화되어
+            # 영영 확정되지 못하고, 색이 또렷한데도 20번을 헛누르게 된다.
+            return
+
         self._unknown_reads += 1
-        if self._unknown_reads < self._max_unknown_reads:
+        # <= 라야 상한만큼 눌러 본다. < 로 두면 마지막 한 번을 눌러 보지도 않고 멈춘다.
+        if self._unknown_reads <= self._max_unknown_reads:
             if self._unknown_reads % self._unknown_tap_interval == 0:
                 self._tap_through_overlay(ctx, reading)
             return
@@ -398,7 +438,7 @@ class QuestMachine:
             f"({self._unknown_reads}/{self._max_unknown_reads}, {reading.detail})"
         )
         ctx.tap_rect(self._safe_tap_area)
-        if ctx.sleep(1.0):
+        if ctx.sleep(UNKNOWN_TAP_WAIT):
             ctx.refresh()
         self._panel_reader.reset()
 

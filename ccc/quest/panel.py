@@ -50,6 +50,12 @@ GOLD_RANGE = HsvRange(h=(10, 40), s=(110, 255), v=(130, 255))
 # 실측으로도 완료 프레임의 회색 비율은 0.011 에 그친다 (황금 0.943).
 GRAY_RANGE = HsvRange(h=(0, 179), s=(0, 120), v=(45, 225))
 
+# 초록: 진행중인데 회색이 아닌 창이 있다. 실측으로 색 표본의 85% 가 이 범위였다
+# (중앙값 H 54 · S 130 · V 92). 채도가 120 을 넘어 회색에 안 들고, 색상이 40 을
+# 넘어 황금에도 안 들어 판정불가로 빠졌다. 진행도가 0/10 이었으니 완료가 아니다.
+# 그래서 '진행중' 의 다른 옷으로 보고 회색 쪽에 합산한다.
+GREEN_RANGE = HsvRange(h=(35, 85), s=(80, 255), v=(50, 255))
+
 MIN_RATIO = 0.15
 """우세한 쪽이 최소한 이 정도는 차지해야 판정한다."""
 
@@ -82,6 +88,13 @@ class PanelReading:
     text_ratio: float = 1.0
     """퀘스트창 영역의 흰 글씨 비율. 창이 화면에 있는지 가리는 데 쓴다."""
 
+    settling: bool = False
+    """색은 이미 또렷한데 연속 확인이 아직 안 찬 상태.
+
+    '못 읽었다' 와는 다르다. 한 프레임만 더 보면 확정된다. 이걸 판독 실패로
+    세면, 빈 곳을 눌러 넘기려는 처리가 끼어들어 확정될 기회를 계속 뺏는다.
+    """
+
     @property
     def has_panel(self) -> bool:
         return self.text_ratio >= MIN_TEXT_RATIO
@@ -102,6 +115,7 @@ class QuestPanelReader:
         panel_area: NormRect | None = None,
         gold: HsvRange = GOLD_RANGE,
         gray: HsvRange = GRAY_RANGE,
+        green: HsvRange = GREEN_RANGE,
         min_ratio: float = MIN_RATIO,
         min_margin: float = MIN_MARGIN,
         min_text_ratio: float = MIN_TEXT_RATIO,
@@ -110,6 +124,7 @@ class QuestPanelReader:
         self.panel_area = panel_area
         self.gold = gold
         self.gray = gray
+        self.green = green
         self.min_ratio = min_ratio
         self.min_margin = min_margin
         self.min_text_ratio = min_text_ratio
@@ -125,7 +140,8 @@ class QuestPanelReader:
 
         hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
         gold_ratio = _ratio(hsv, self.gold)
-        gray_ratio = _ratio(hsv, self.gray)
+        # 초록 창도 '진행중' 이다. 색만 다를 뿐 눌러서 할 일이 남았다는 뜻은 같다.
+        gray_ratio = max(_ratio(hsv, self.gray), _ratio(hsv, self.green))
 
         text_ratio = self._text_ratio(frame)
         if text_ratio < self.min_text_ratio:
@@ -180,6 +196,10 @@ def _ratio(hsv: np.ndarray, rng: HsvRange) -> float:
     return float(np.count_nonzero(mask)) / mask.size
 
 
+STABLE_FRAMES = 2
+"""연속 이만큼 같은 값이어야 상태를 확정한다."""
+
+
 class StablePanelReader:
     """연속 여러 프레임이 같은 값일 때만 확정하는 래퍼.
 
@@ -187,7 +207,7 @@ class StablePanelReader:
     한 프레임만 보고 상태를 바꾸면 튄다.
     """
 
-    def __init__(self, reader: QuestPanelReader, required: int = 2):
+    def __init__(self, reader: QuestPanelReader, required: int = STABLE_FRAMES):
         self.reader = reader
         self.required = max(1, required)
         self._last = PanelState.UNKNOWN
@@ -207,6 +227,8 @@ class StablePanelReader:
                 reading.gold_ratio,
                 reading.gray_ratio,
                 reading.text_ratio,
+                # 밑에서는 이미 색이 갈렸는데 횟수만 모자란 것인지 표시해 둔다.
+                settling=reading.state is not PanelState.UNKNOWN,
             )
         return reading
 
