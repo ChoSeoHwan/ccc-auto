@@ -316,6 +316,10 @@ class QuestMachine:
             f"({elapsed:.0f}/{self._unknown_quest_timeout:.0f}초, "
             f"{self._unknown_rounds + 1}/{self._max_unknown_rounds}회차)"
         )
+        # 퀘스트창은 읽히는데 이름만 안 걸리는 경우가 있다. 연출이나 말풍선이
+        # 이름 줄만 살짝 덮으면 색은 그대로라 창은 보이는데 글자가 안 맞는다.
+        # 빈 곳을 눌러 그런 것을 걷어 본다 — 가린 게 없었다면 아무 일도 없다.
+        self._tap_empty_area(ctx)
         if not ctx.sleep(self._unknown_quest_retry):
             return
         self._panel_reader.reset()
@@ -461,6 +465,20 @@ class QuestMachine:
         if ctx.sleep(UNKNOWN_TAP_WAIT):
             ctx.refresh()
         self._panel_reader.reset()
+
+    def _tap_empty_area(self, ctx: Context) -> bool:
+        """빈 곳을 한 번 눌러 가린 것을 걷어 본다. 눌렀으면 True.
+
+        누르는 자리는 버튼이 없는 전장 한복판이라, 가린 게 없었어도 헛수고로
+        끝날 뿐 다른 일이 일어나지 않는다.
+
+        다만 X 가 있으면 누르지 않는다. 그런 팝업은 빈 곳으로 안 닫히고,
+        치우는 건 다음 걸음의 전투화면 복귀가 할 일이다.
+        """
+        if self._popup_arrived(ctx):
+            return False
+        ctx.tap_rect(self._safe_tap_area)
+        return True
 
     def _ensure_battle_screen(self, ctx: Context) -> bool:
         result = self._navigator.return_to_battle(ctx)

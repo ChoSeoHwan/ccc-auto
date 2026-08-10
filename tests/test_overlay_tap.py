@@ -54,6 +54,27 @@ def frame(*, close_button: bool) -> np.ndarray:
     return image
 
 
+GRAY = (120, 120, 120)
+"""진행중 퀘스트창 색 (BGR). 채도가 0 이라 회색 범위 한가운데다."""
+
+WHITE = (245, 245, 245)
+"""퀘스트 이름 글씨 색 (BGR)."""
+
+
+def gray_panel_frame() -> np.ndarray:
+    """퀘스트창은 또렷하게 읽히는데 이름은 어느 퀘스트와도 안 맞는 화면.
+
+    '등록되지 않은 퀘스트' 가 바로 이 상태다 — 창이 안 보이는 것과는 다르다.
+    """
+    image = np.zeros((HEIGHT, WIDTH, 3), np.uint8)
+    image[:] = (30, 30, 30)
+    _fill(image, AnchorSet().get(QUEST_PANEL_SAMPLE), GRAY)
+    # 창이 화면에 있다고 보려면 그 자리에 흰 글씨가 얼마간 있어야 한다.
+    box = AnchorSet().get(QUEST_PANEL).scaled(WIDTH, HEIGHT)
+    image[box.y + 8 : box.y + 20, box.x + 10 : box.right - 10] = WHITE
+    return image
+
+
 def _fill(image: np.ndarray, area: NormRect, color: tuple[int, int, int]) -> None:
     box = area.scaled(WIDTH, HEIGHT)
     image[box.y : box.bottom, box.x : box.right] = color
@@ -110,7 +131,20 @@ def tapped_in(client: FakeAdbClient, area: NormRect) -> bool:
 
 @pytest.fixture(autouse=True)
 def no_sleep(monkeypatch):
+    """대기를 건너뛴다.
+
+    ``sleep`` 만 무력화하면 ``wait_until`` 이 실제 시계로 상한을 다 태운다.
+    X 를 스무 번 누르는 경로가 그렇게 21초를 잡아먹었다. 조건은 그대로
+    확인하되 시간만 건너뛰도록 함께 갈아끼운다.
+    """
     monkeypatch.setattr(Context, "sleep", lambda self, seconds: True)
+    monkeypatch.setattr(
+        Context,
+        "wait_until",
+        lambda self, condition, timeout, interval=0.0, first_delay=0.0: any(
+            condition(self.refresh()) for _ in range(3)
+        ),
+    )
 
 
 def test_X_가_없으면_빈_곳을_누른다():
@@ -140,3 +174,34 @@ def test_늦게_뜬_X_는_판독_실패로_세지_않는다():
     machine.tick(ctx)
 
     assert machine._unknown_reads == 0
+
+
+def _run_to_unknown_quest(frames: list[np.ndarray]):
+    """등록된 퀘스트가 하나도 없는 상태로 '판별 불가' 까지 몰고 간다."""
+    machine, ctx, client = build(frames)
+    machine._registry.definitions = []
+    for _ in range(3):  # 창 확정(2프레임) + 판별
+        ctx.set_frame(ctx.refresh())
+        machine.tick(ctx)
+    return machine, client
+
+
+def test_등록되지_않은_퀘스트면_빈_곳을_눌러_본다():
+    """창은 읽히는데 이름만 안 걸리는 경우가 있다.
+
+    연출이나 말풍선이 이름 줄만 살짝 덮으면 색은 그대로라 창은 보이는데
+    글자가 안 맞는다. 빈 곳을 눌러 그런 것을 걷어 본다 — 누르는 자리는
+    버튼이 없는 전장 한복판이라 가린 게 없었어도 아무 일이 없다.
+    """
+    _, client = _run_to_unknown_quest([gray_panel_frame()])
+
+    assert tapped_in(client, AnchorSet().get(SAFE_TAP)), f"누르지 않았습니다: {client.taps}"
+
+
+def test_X_가_있으면_등록되지_않은_퀘스트여도_누르지_않는다():
+    """X 있는 팝업은 빈 곳으로 안 닫힌다. 치우는 건 전투화면 복귀의 몫이다."""
+    covered = gray_panel_frame()
+    _fill(covered, AnchorSet().get(NAV_CLOSE), RED)
+    _, client = _run_to_unknown_quest([gray_panel_frame(), covered])
+
+    assert not tapped_in(client, AnchorSet().get(SAFE_TAP)), f"눌렀습니다: {client.taps}"
