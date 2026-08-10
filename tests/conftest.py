@@ -14,7 +14,6 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-import cv2
 import numpy as np
 import pytest
 from pytest_bdd import given, parsers, then, when
@@ -25,7 +24,7 @@ from ccc.config import FIXTURE_DIR, TEMPLATE_DIR
 from ccc.context import Context
 from ccc.geometry import NormRect
 from ccc.notify import Notifier
-from ccc.vision import TemplateStore
+from ccc.vision import TemplateStore, imread
 
 FRAME_DIR = FIXTURE_DIR
 
@@ -64,7 +63,7 @@ def pytest_collection_modifyitems(config, items):
 
 def load_frame(name: str) -> np.ndarray:
     path = FRAME_DIR / f"{name}.png"
-    frame = cv2.imread(str(path))
+    frame = imread(path)
     if frame is None:
         raise FileNotFoundError(f"픽스처 화면이 없습니다: {path}\n{SETUP_HINT}")
     return frame

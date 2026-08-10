@@ -21,6 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..geometry import NormRect
+from ..vision.imagefile import imread
 from ..vision.template import Template
 
 ASSET_DIR = Path(__file__).resolve().parent
@@ -30,10 +31,11 @@ _SOURCES: dict[str, NormRect] = {
     # 게임 영역은 창 안에서 세로 31px 아래, 배율 1.0 이었다(두 지점 0.810/0.880 일치).
     # 저장된 그림은 83x31 인데 운영 화면(506폭)에서는 76x28 로 잡혔다 — 배율 0.92.
     "oven_levelup": NormRect(0.6146, 0.8653, 0.1502, 0.0312),
-    # 오븐 성장 화면은 아직 스크린샷이 없어 위치를 재지 못했다. 같은 출처의
-    # 조각이라 배율만 같게(0.92) 잡아 두었다 — 87x28 -> 80x26.
-    # 위치를 모르므로 찾을 때는 화면 전체를 본다.
-    "oven_grow": NormRect(0.0, 0.0, 0.1581, 0.0290),
+    # '오븐 레벨' 화면(379x674)에서 실측해 잘랐다. 51x16 px.
+    #
+    # 처음 것은 다른 출처의 조각에 크기를 짐작해 적어 둔 것이었고, 어느 배율로도
+    # 맞지 않았다(최고 0.50). 실제 화면을 받고 나서 다시 잘랐다.
+    "oven_grow": NormRect(0.4301, 0.8546, 0.1346, 0.0237),
 }
 
 _cache: dict[str, Template] = {}
@@ -45,10 +47,8 @@ def load(name: str) -> Template:
     if cached is not None:
         return cached
 
-    import cv2
-
     path = ASSET_DIR / f"{name}.png"
-    image = cv2.imread(str(path))
+    image = imread(path)
     if image is None:
         raise FileNotFoundError(f"번들 조각을 읽지 못했습니다: {path}")
 

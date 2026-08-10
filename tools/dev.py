@@ -31,7 +31,7 @@ from ccc.anchors import AnchorSet  # noqa: E402
 from ccc.app import AppError, AutomationApp  # noqa: E402
 from ccc.config import CAPTURE_DIR, Config  # noqa: E402
 from ccc.geometry import NormRect  # noqa: E402
-from ccc.vision import BUTTON_ORANGE  # noqa: E402
+from ccc.vision import BUTTON_ORANGE, imread, imwrite  # noqa: E402
 
 DEFAULT_MODULES = [
     "power_save.ExitPowerSaveMode",
@@ -55,11 +55,10 @@ def connect(capture: str = "adb") -> AutomationApp:
 
 
 def save(image, prefix: str) -> Path:
-    import cv2
-
     CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
     path = CAPTURE_DIR / f"{prefix}-{datetime.now().strftime('%H%M%S')}.png"
-    cv2.imwrite(str(path), image)
+    if not imwrite(path, image):
+        raise AppError(f"화면을 저장하지 못했습니다: {path}")
     return path
 
 
@@ -162,9 +161,7 @@ def load_frame(app: AutomationApp, source: str | None):
     if not source:
         return app.capture()
 
-    import cv2
-
-    frame = cv2.imread(source)
+    frame = imread(source)
     if frame is None:
         raise AppError(f"이미지를 읽지 못했습니다: {source}")
     return frame

@@ -19,6 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from ..geometry import NormRect
+from .imagefile import imread, imwrite
 
 log = logging.getLogger(__name__)
 
@@ -73,11 +74,9 @@ class TemplateStore:
         return sorted(p.stem for p in self.directory.glob("*.png"))
 
     def save(self, name: str, image: np.ndarray, source: NormRect) -> Template:
-        import cv2
-
         png_path = self.directory / f"{name}.png"
         meta_path = self.directory / f"{name}.json"
-        if not cv2.imwrite(str(png_path), image):
+        if not imwrite(png_path, image):
             raise TemplateError(f"템플릿 저장 실패: {png_path}")
         meta_path.write_text(
             json.dumps(source.to_dict(), indent=2) + "\n", encoding="utf-8"
@@ -93,14 +92,12 @@ class TemplateStore:
         if cached is not None:
             return cached
 
-        import cv2
-
         png_path = self.directory / f"{name}.png"
         if not png_path.exists():
             raise TemplateError(
                 f"템플릿 '{name}' 이 없습니다. 컨트롤 창의 '템플릿 캡처' 로 먼저 만들어 주세요."
             )
-        image = cv2.imread(str(png_path), cv2.IMREAD_COLOR)
+        image = imread(png_path)
         if image is None:
             raise TemplateError(f"템플릿 이미지를 읽지 못했습니다: {png_path}")
 

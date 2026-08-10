@@ -16,6 +16,7 @@ from .template import (
     find,
     find_all,
 )
+from .imagefile import imread, imwrite
 from .text import find_text, text_mask
 
 __all__ = [
@@ -32,6 +33,8 @@ __all__ = [
     "find_all",
     "find_color_button",
     "find_text",
+    "imread",
+    "imwrite",
     "is_static",
     "mean_color",
     "text_mask",

@@ -16,7 +16,7 @@ from .. import anchors as anchor_names
 from ..anchors import AnchorSet
 from ..config import CAPTURE_DIR
 from ..geometry import NormRect
-from ..vision import crop
+from ..vision import crop, imwrite
 from .navigator import RED_RATIO_THRESHOLD, BattleScreenNavigator
 from .panel import QuestPanelReader
 
@@ -52,13 +52,15 @@ def save_frame(frame: np.ndarray, directory: Path, name: str) -> Path | None:
 
     ``save_snapshot`` 과 달리 영역 확대본을 만들지 않는다. 어디를 봐야 할지
     아직 모르는 화면을 모을 때 쓴다 — 자를 자리를 알면 이미 템플릿이 있다.
-    """
-    import cv2
 
+    이름에 한글이 들어간다. 저장에 실패하면 ``None`` 을 돌려줘 부르는 쪽이
+    "저장했다" 고 알리지 않게 한다.
+    """
     try:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{name}.png"
-        cv2.imwrite(str(path), frame)
+        if not imwrite(path, frame):
+            return None
         return path
     except Exception:
         log.exception("화면 저장 실패: %s", name)
@@ -67,15 +69,13 @@ def save_frame(frame: np.ndarray, directory: Path, name: str) -> Path | None:
 
 def save_snapshot(frame: np.ndarray, area: NormRect, prefix: str) -> Path | None:
     """전체 화면과 해당 영역 확대본을 함께 저장하고 영역 파일 경로를 반환."""
-    import cv2
-
     try:
         CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         full_path = CAPTURE_DIR / f"{prefix}-{stamp}-full.png"
         area_path = CAPTURE_DIR / f"{prefix}-{stamp}-area.png"
-        cv2.imwrite(str(full_path), frame)
-        cv2.imwrite(str(area_path), crop(frame, area))
+        if not imwrite(full_path, frame) or not imwrite(area_path, crop(frame, area)):
+            return None
         return area_path
     except Exception:
         log.exception("진단 이미지 저장 실패")
