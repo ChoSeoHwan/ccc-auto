@@ -80,8 +80,21 @@ BUTTON_BAND = NormRect(0.20, 0.83, 0.78, 0.10)
 """
 
 AUTO_THRESHOLD = 0.80
-LEVELUP_THRESHOLD = 0.80
 GROW_THRESHOLD = 0.80
+
+LEVELUP_THRESHOLD = 0.65
+"""레벨업 확인창을 알아볼 임계값.
+
+0.80 은 참값에 너무 붙어 있었다. 실측하면 확인창이 0.848 이고 나머지 화면은
+0.24~0.48 이라, 0.80 은 빈 구간의 **꼭대기**다. 창이 뜨는 순간이나 창 크기가
+달라 점수가 조금만 흔들려도 놓친다.
+
+놓치면 그냥 못 알아보고 마는 게 아니다. 확인창의 '레벨업' 은 '정리하기' 와
+똑같은 주황 버튼이라, 색으로 찾는 쪽이 대신 눌러 버린다. 그러면 오븐 레벨
+화면까지는 갔는데 아무도 마무리를 하지 않는다.
+
+빈 구간(0.48~0.85) 한가운데인 0.65 로 내렸다. 아래로 1.36배, 위로 1.3배다.
+"""
 
 LEVELUP_SEARCH = NormRect(0.45, 0.80, 0.55, 0.12)
 """'레벨업' 버튼을 찾을 범위.
@@ -283,23 +296,40 @@ class OvenEquipmentDraw(QuestDefinition):
         ctx.tap_match(offer)
         self._keep_shot(ctx, "2-레벨업-누른-뒤", settle=True)
 
-        grow = self._wait_for_grow(ctx)
-        if grow is None:
+        if not self._grow_oven(ctx, LEVELUP_GROW_TIMEOUT):
             ctx.log("'오븐 성장' 버튼을 찾지 못했습니다. 확인부터 다시 봅니다.")
-            return True
+        return True
+
+    def _grow_oven(self, ctx: Context, timeout: float = 0.0) -> bool:
+        """'오븐 성장' 버튼이 보이면 누르고 True.
+
+        **어떤 경로로 그 화면에 왔든 누른다.** 확인창의 '레벨업' 은 '정리하기'
+        와 똑같은 주황 버튼이라, 확인창을 못 알아본 판에서는 색으로 찾는 쪽이
+        먼저 눌러 버린다. 그러면 오븐 레벨 화면까지는 갔는데 아무도 마무리를
+        하지 않아, 네비게이터가 X 로 닫고 레벨업은 영영 안 된다.
+
+        그래서 '확인창을 눌렀으니 다음은 성장' 이라는 순서에 기대지 않고,
+        **성장 버튼이 화면에 있으면 그것만으로 누를 이유가 된다.**
+        """
+        grow = self._wait_for_grow(ctx, timeout)
+        if grow is None:
+            return False
 
         ctx.log(f"'오븐 성장' 클릭 (일치도 {grow.score:.2f})")
         ctx.tap_match(grow)
         self._keep_shot(ctx, "3-오븐성장-누른-뒤", settle=True)
         return True
 
-    def _wait_for_grow(self, ctx: Context):
-        """'오븐 성장' 버튼이 뜨기를 기다린다. 번들 조각으로 찾는다."""
+    def _wait_for_grow(self, ctx: Context, timeout: float):
+        """'오븐 성장' 버튼을 찾는다. ``timeout`` 이 0 이면 지금 화면만 본다."""
         try:
             asset = load_asset(GROW_TEMPLATE)
         except (FileNotFoundError, KeyError) as exc:
             log.warning("번들 조각을 쓸 수 없습니다: %s", exc)
             return None
+
+        if timeout <= 0:
+            return find(ctx.frame, asset, GROW_THRESHOLD, GROW_SEARCH)
 
         found = []
 
@@ -310,7 +340,7 @@ class OvenEquipmentDraw(QuestDefinition):
             found.append(match)
             return True
 
-        ctx.wait_until(appeared, LEVELUP_GROW_TIMEOUT)
+        ctx.wait_until(appeared, timeout)
         return found[0] if found else None
 
     def _keep_shot(self, ctx: Context, name: str, settle: bool = False) -> None:
@@ -414,6 +444,11 @@ class OvenEquipmentDraw(QuestDefinition):
 
         for _ in range(DISMISS_ROUNDS):
             if self._take_levelup_offer(ctx):
+                return StepResult.ok()
+
+            # 확인창을 못 알아본 판에서는 색으로 찾는 쪽이 '레벨업' 을 먼저 눌러
+            # 여기까지 와 있을 수 있다. 어떻게 왔든 성장 버튼이 보이면 누른다.
+            if self._grow_oven(ctx):
                 return StepResult.ok()
 
             rect = find_color_button(ctx.frame, BUTTON_ORANGE, BUTTON_BAND)
