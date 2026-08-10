@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 import pytest
 
-from ccc.anchors import AnchorSet
+from ccc.anchors import NAV_CLOSE, AnchorSet
 from ccc.context import Context
 from ccc.geometry import NormRect
 from ccc.notify import Notifier
@@ -37,33 +37,52 @@ BUTTON = (110, 578, 130, 34)
 """주황 버튼 자리. 확인창의 '레벨업' 도 '정리하기' 도 이 띠에 앉는다."""
 
 
-def frame_with_button() -> np.ndarray:
+RED = (40, 40, 220)
+"""하단 닫기(X) 버튼 색 (BGR)."""
+
+
+def make_frame(*, button: bool = False, close: bool = False) -> np.ndarray:
+    """어두운 화면. 퀘스트창은 안 보이고, 버튼과 X 만 넣고 뺀다."""
     image = np.zeros((HEIGHT, WIDTH, 3), np.uint8)
     image[:] = (30, 30, 30)
-    x, y, w, h = BUTTON
-    cv2.rectangle(image, (x, y), (x + w, y + h), ORANGE, -1)
+    if button:
+        x, y, w, h = BUTTON
+        cv2.rectangle(image, (x, y), (x + w, y + h), ORANGE, -1)
+    if close:
+        box = AnchorSet().get(NAV_CLOSE).scaled(WIDTH, HEIGHT)
+        image[box.y : box.bottom, box.x : box.right] = RED
     return image
 
 
+def frame_with_button() -> np.ndarray:
+    return make_frame(button=True)
+
+
 class Screen:
-    def __init__(self, image: np.ndarray):
-        self.image = image
+    """정해진 순서대로 화면을 흘려 준다. 끝나면 마지막 화면을 되풀이한다."""
+
+    def __init__(self, *images: np.ndarray):
+        self.images = list(images)
+        self.index = 0
 
     def grab(self) -> np.ndarray:
-        return self.image
+        image = self.images[min(self.index, len(self.images) - 1)]
+        self.index += 1
+        return image
 
 
-def build(image: np.ndarray) -> tuple[Context, FakeAdbClient]:
+def build(*images: np.ndarray) -> tuple[Context, FakeAdbClient]:
     client = FakeAdbClient()
+    screen = Screen(*images)
     ctx = Context(
         client,  # type: ignore[arg-type]
         TemplateStore(TEMPLATE_DIR),
         threading.Event(),
         anchors=AnchorSet(),
         notifier=Notifier(enabled=False),
-        frame_provider=Screen(image).grab,
+        frame_provider=screen.grab,
     )
-    ctx.set_frame(image)
+    ctx.set_frame(screen.grab())
     ctx.sleep = lambda seconds: True  # type: ignore[method-assign]
     ctx.wait_until = lambda condition, timeout, interval=0.0, first_delay=0.0: bool(  # type: ignore[method-assign]
         condition(ctx.refresh())
@@ -109,3 +128,30 @@ def test_성장_버튼이_없으면_주황_버튼을_누른다(monkeypatch):
     quest(monkeypatch, grow=False)._dismiss_results(ctx)
 
     assert tapped_button(client), f"누르지 않았습니다: {client.taps}"
+
+
+def test_그려지는_중인_팝업을_재료_부족으로_오진하지_않는다(monkeypatch):
+    """팝업은 커지며 나타난다. 다 그려지기 전에는 X 만 보인다.
+
+    첫 프레임만 보고 끊으면 눌러야 할 확인창을 재료 부족으로 오진한다.
+    실제로 그 때문에 오븐 레벨업이 계속 실패했다 — 자동화가 본 마지막
+    프레임은 확인창이 반쯤 그려진 것이었고 조각 점수는 0.49 였다.
+    """
+    ctx, client = build(make_frame(close=True), make_frame(button=True, close=True))
+
+    result = quest(monkeypatch, grow=False)._dismiss_results(ctx)
+
+    assert result.success or result.retryable, f"진행 불가로 끊었습니다: {result.reason}"
+    assert tapped_button(client), f"다 그려진 뒤에도 누르지 않았습니다: {client.taps}"
+
+
+def test_끝내_아무것도_안_뜨면_진행_불가로_알린다(monkeypatch):
+    """기다려도 X 뿐이면 그때는 정말 재료가 없는 것이다."""
+    ctx, client = build(make_frame(close=True))
+
+    result = quest(monkeypatch, grow=False)._dismiss_results(ctx)
+
+    assert not result.success
+    assert not result.retryable
+    assert "재료" in result.reason
+    assert not tapped_button(client)

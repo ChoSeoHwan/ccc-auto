@@ -145,6 +145,15 @@ POPUP_TIMEOUT = 5.0
 TIDY_TIMEOUT = 5.0
 """'정리 하기' 를 누르고 화면이 넘어가기를 기다릴 상한."""
 
+POPUP_SETTLE = 2.0
+"""X 만 보일 때, 팝업이 다 그려지기를 한 번 기다릴 상한.
+
+팝업은 커지며 나타난다. 다 그려지기 전에는 조각도 색도 안 걸리고 X 만 보여서,
+첫 프레임만 보고 끊으면 눌러야 할 확인창을 재료 부족으로 오진한다. 실측에서
+레벨업 확인창은 그리는 중 0.49, 다 그려지고는 0.85 였고 0.7초면 다 그려졌다.
+상한이라 다 그려지면 즉시 넘어간다.
+"""
+
 MAX_TIDY_TAPS = 4
 """주황 버튼을 이어서 누를 최대 횟수.
 
@@ -428,6 +437,25 @@ class OvenEquipmentDraw(QuestDefinition):
 
         ctx.wait_until(moved, TIDY_TIMEOUT)
 
+    def _has_button(self, frame) -> bool:
+        """이 화면에 눌러야 할 것이 있는지. 팝업이 다 그려졌는지 가리는 데 쓴다.
+
+        `_dismiss_results` 가 보는 세 가지를 그대로 본다 — 여기서 참이면
+        그 쪽에서도 잡힌다.
+        """
+        for name in (LEVELUP_TEMPLATE, *GROW_TEMPLATES):
+            threshold, search = (
+                (LEVELUP_THRESHOLD, LEVELUP_SEARCH)
+                if name == LEVELUP_TEMPLATE
+                else (GROW_THRESHOLD, GROW_SEARCH)
+            )
+            try:
+                if find(frame, load_asset(name), threshold, search) is not None:
+                    return True
+            except (FileNotFoundError, KeyError):
+                continue
+        return find_color_button(frame, BUTTON_ORANGE, BUTTON_BAND) is not None
+
     def _dismiss_results(self, ctx: Context) -> StepResult:
         """뽑힌 장비 팝업을 빈 곳 탭으로 치우며 뽑기가 끝나기를 기다린다.
 
@@ -455,12 +483,19 @@ class OvenEquipmentDraw(QuestDefinition):
         **정리를 한 판은 실패가 아니다.** 정리하느라 이번 판의 뽑기는 돌지
         않지만, 자리가 생겼으니 다음 판은 정상으로 돌아간다. 그런데도 재료
         부족으로 알리면 사람을 헛되이 부르고 실패 3회를 향해 쌓인다.
+
+        **X 하나로 곧장 진행 불가를 내지 않는다.** 팝업은 커지며 나타나는데,
+        다 그려지기 전에는 조각도 색도 안 걸린다. 그 반쯤 그려진 화면에는 X 만
+        보이므로, 첫 프레임만 보고 끊으면 눌러야 할 확인창을 재료 부족으로
+        오진한다. 실측에서 레벨업 확인창이 그리는 중에는 0.49, 다 그려지고는
+        0.85 였다. 그래서 X 를 보면 한 번은 기다려 본다.
         """
         panel_area = ctx.anchors.get(anchor_names.QUEST_PANEL)
         safe_tap = ctx.anchors.get(anchor_names.SAFE_TAP)
         navigator = BattleScreenNavigator(ctx.anchors.get(anchor_names.NAV_CLOSE))
         tidy_taps = 0
         empty_taps = 0
+        waited_for_popup = False
 
         def panel_back(frame) -> bool:
             return panel_visible(frame, panel_area)
@@ -497,6 +532,11 @@ class OvenEquipmentDraw(QuestDefinition):
                     return StepResult.retry(
                         f"장비를 정리했습니다 ({tidy_taps}회). 다시 확인합니다"
                     )
+                if not waited_for_popup:
+                    # 팝업이 아직 커지는 중일 수 있다. 한 번만 기다려 본다.
+                    waited_for_popup = True
+                    ctx.wait_until(self._has_button, POPUP_SETTLE)
+                    continue
                 return StepResult.blocked(
                     "자동 열기가 시작되지 않았습니다. 재료가 부족할 수 있습니다"
                 )
