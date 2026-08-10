@@ -59,7 +59,16 @@ log = logging.getLogger(__name__)
 
 AUTO_TEMPLATE = "oven_auto"
 LEVELUP_TEMPLATE = "oven_levelup"
-GROW_TEMPLATE = "oven_grow"
+
+GROW_TEMPLATES = ("oven_grow", "oven_grow_levelup")
+"""'오븐 레벨' 화면 아래 한가운데 버튼. 같은 자리에 둘 중 하나가 뜬다.
+
+    성장 게이지 안 참   청록 '오븐 성장'
+    성장 게이지 다 참   주황 '레벨업!'
+
+글자도 색도 바뀌므로 하나로는 못 잡는다. 둘 다 찾아보고 잡히는 쪽을 누른다.
+어느 쪽이든 눌러야 오븐이 올라가므로 가릴 이유는 없다.
+"""
 
 AUTO_SEARCH = NormRect(0.18, 0.82, 0.40, 0.12)
 """Auto 버튼을 찾을 범위. 오븐 왼쪽 아래를 넉넉히 덮는다.
@@ -321,20 +330,34 @@ class OvenEquipmentDraw(QuestDefinition):
         return True
 
     def _wait_for_grow(self, ctx: Context, timeout: float):
-        """'오븐 성장' 버튼을 찾는다. ``timeout`` 이 0 이면 지금 화면만 본다."""
-        try:
-            asset = load_asset(GROW_TEMPLATE)
-        except (FileNotFoundError, KeyError) as exc:
-            log.warning("번들 조각을 쓸 수 없습니다: %s", exc)
+        """성장 버튼을 찾는다. ``timeout`` 이 0 이면 지금 화면만 본다.
+
+        게이지가 찼는지에 따라 '오븐 성장' 과 '레벨업!' 중 하나가 뜬다. 둘 다
+        찾아보고 먼저 걸리는 쪽을 돌려준다.
+        """
+        assets = []
+        for name in GROW_TEMPLATES:
+            try:
+                assets.append(load_asset(name))
+            except (FileNotFoundError, KeyError) as exc:
+                log.warning("번들 조각을 쓸 수 없습니다: %s", exc)
+        if not assets:
+            return None
+
+        def look(frame):
+            for asset in assets:
+                match = find(frame, asset, GROW_THRESHOLD, GROW_SEARCH)
+                if match is not None:
+                    return match
             return None
 
         if timeout <= 0:
-            return find(ctx.frame, asset, GROW_THRESHOLD, GROW_SEARCH)
+            return look(ctx.frame)
 
         found = []
 
         def appeared(frame) -> bool:
-            match = find(frame, asset, GROW_THRESHOLD, GROW_SEARCH)
+            match = look(frame)
             if match is None:
                 return False
             found.append(match)
