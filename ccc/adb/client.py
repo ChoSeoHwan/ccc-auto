@@ -82,7 +82,8 @@ class AdbClient:
     # ------------------------------------------------------------------
     def connect(self) -> DeviceInfo:
         """브리지에 접속하고 디바이스 정보를 읽어 온다."""
-        if ":" in self.serial:  # 네트워크 주소면 connect 시도
+        available = list_devices(self.adb_path)
+        if ":" in self.serial and self.serial not in available:
             try:
                 subprocess.run(
                     [self.adb_path, "connect", self.serial],
@@ -92,8 +93,8 @@ class AdbClient:
                 )
             except (OSError, subprocess.SubprocessError) as exc:
                 log.warning("adb connect 실패(무시하고 진행): %s", exc)
+            available = list_devices(self.adb_path)
 
-        available = list_devices(self.adb_path)
         if self.serial not in available:
             raise AdbError(
                 f"디바이스 '{self.serial}' 에 연결하지 못했습니다. "
