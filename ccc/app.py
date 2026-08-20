@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 
 BACKEND_SCREEN = "screen"
 BACKEND_ADB = "adb"
+ARENA_MODULE_KEY = "arena_repeat.ArenaRepeat"
 
 
 class AppError(RuntimeError):
@@ -52,6 +53,7 @@ class AutomationApp:
         self.engine: Engine | None = None
         self.modules: list[AutomationModule] = []
         self.module_errors: dict[str, str] = {}
+        self._run_mode: str | None = None
 
         self.on_log: Callable[[str], None] | None = None
         self.on_engine_state: Callable[[str], None] | None = None
@@ -219,17 +221,43 @@ class AutomationApp:
     def running(self) -> bool:
         return self.engine is not None and self.engine.running
 
+    @property
+    def run_mode(self) -> str | None:
+        return self._run_mode
+
+    def general_modules(self) -> list[AutomationModule]:
+        return [
+            module
+            for module in self.enabled_modules()
+            if module.key != ARENA_MODULE_KEY
+        ]
+
+    def arena_module(self) -> AutomationModule | None:
+        return next(
+            (module for module in self.modules if module.key == ARENA_MODULE_KEY),
+            None,
+        )
+
     def start(self) -> None:
+        self._start_modules(self.general_modules(), mode="general")
+
+    def start_arena(self) -> None:
+        module = self.arena_module()
+        if module is None:
+            raise AppError("아레나 무한 도전 모듈을 찾지 못했습니다.")
+        self._start_modules([module], mode="arena")
+
+    def _start_modules(self, selected: list[AutomationModule], *, mode: str) -> None:
         self._require_client()
         assert self.engine is not None and self.client is not None
 
-        selected = self.enabled_modules()
         if not selected:
             raise AppError("실행할 모듈을 하나 이상 켜 주세요.")
 
         backend = self.create_backend()
         self.client.dry_run = self.config.dry_run
         self.client.refresh_device()
+        self._run_mode = mode
         self.engine.start(
             backend, selected, fps=self.config.fps, options=self.config.module_options
         )
@@ -237,6 +265,11 @@ class AutomationApp:
     def stop(self) -> None:
         if self.engine:
             self.engine.stop()
+
+    def request_stop(self) -> None:
+        """UI를 기다리게 하지 않고 실행 엔진에 정지만 요청한다."""
+        if self.engine:
+            self.engine.request_stop()
 
     # ------------------------------------------------------------------
     def save_config(self) -> None:
@@ -254,6 +287,8 @@ class AutomationApp:
             self.on_log(message)
 
     def _engine_state(self, state: str) -> None:
+        if state == "stopped":
+            self._run_mode = None
         if self.on_engine_state:
             self.on_engine_state(state)
 

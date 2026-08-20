@@ -12,7 +12,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from ..app import AppError, AutomationApp
+from ..app import ARENA_MODULE_KEY, AppError, AutomationApp
 from ..selector import select_region
 from .anchor_dialog import AnchorEditDialog
 from .diagnostics_dialog import show_detection_report
@@ -38,6 +38,7 @@ class ControlWindow(tk.Tk):
         self.app = app
         self.module_vars: dict[str, tk.BooleanVar] = {}
         self._log_queue: queue.Queue[str] = queue.Queue()
+        self._pending_start_mode: str | None = None
 
         app.on_log = self._log_queue.put
         app.on_engine_state = lambda state: self.after(0, self._apply_engine_state, state)
@@ -134,6 +135,22 @@ class ControlWindow(tk.Tk):
             quest_buttons, text="퀘스트 재개", command=self._resume, state="disabled"
         )
         self.resume_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
+
+        ttk.Separator(box, orient="horizontal").pack(fill="x", pady=(10, 8))
+
+        arena_buttons = ttk.Frame(box)
+        arena_buttons.pack(fill="x")
+        self.arena_btn = ttk.Button(
+            arena_buttons, text="아레나 시작", command=self._start_arena
+        )
+        self.arena_btn.pack(side="left", fill="x", expand=True)
+        self.arena_stop_btn = ttk.Button(
+            arena_buttons,
+            text="아레나 종료",
+            command=self._stop_arena,
+            state="disabled",
+        )
+        self.arena_stop_btn.pack(side="left", fill="x", expand=True, padx=(6, 0))
 
     def _build_modules(self, parent: ttk.Frame) -> None:
         box = ttk.LabelFrame(parent, text="자동화 모듈", padding=_PAD)
@@ -439,6 +456,8 @@ class ControlWindow(tk.Tk):
             ).pack(anchor="w")
 
         for module in modules:
+            if not _is_user_selectable_module(module):
+                continue
             var = tk.BooleanVar(value=self.app.is_module_enabled(module))
             self.module_vars[module.key] = var
             ttk.Checkbutton(
@@ -452,14 +471,50 @@ class ControlWindow(tk.Tk):
 
     # ------------------------------------------------------------------
     def _start(self) -> None:
+        self._request_start_mode("general")
+
+    def _start_arena(self) -> None:
+        self._request_start_mode("arena")
+
+    def _request_start_mode(self, mode: str) -> None:
         self._save()
+        if self.app.running:
+            if self.app.run_mode == mode:
+                return
+            self._pending_start_mode = mode
+            label = "일반 자동화" if mode == "general" else "아레나"
+            self.status_var.set(f"{label}로 전환 중")
+            self._log(f"현재 모드를 종료하고 {label}로 전환합니다.")
+            self.app.request_stop()
+            return
+        self._pending_start_mode = None
+        self._start_mode_now(mode)
+
+    def _start_mode_now(self, mode: str) -> None:
         try:
-            self.app.start()
+            if mode == "arena":
+                self.app.start_arena()
+            else:
+                self.app.start()
         except AppError as exc:
             messagebox.showerror("시작할 수 없음", str(exc), parent=self)
 
+    def _continue_pending_start(self) -> None:
+        if self.app.running:
+            self.after(50, self._continue_pending_start)
+            return
+        mode = self._pending_start_mode
+        self._pending_start_mode = None
+        if mode is not None:
+            self._start_mode_now(mode)
+
     def _stop(self) -> None:
-        self.app.stop()
+        self._pending_start_mode = None
+        self.app.request_stop()
+
+    def _stop_arena(self) -> None:
+        self._pending_start_mode = None
+        self.app.request_stop()
 
     def _to_idle(self) -> None:
         module = self.app.quest_module()
@@ -480,16 +535,29 @@ class ControlWindow(tk.Tk):
         module = self.app.quest_module()
         running = self.app.running
         self.quest_var.set(f"퀘스트: {module.status}" if module else "")
-        state = "normal" if running and module else "disabled"
+        state = (
+            "normal"
+            if running and self.app.run_mode == "general" and module
+            else "disabled"
+        )
         self.idle_btn.config(state=state)
         self.resume_btn.config(state=state)
         self.after(_STATUS_POLL_MS, self._poll_status)
 
     def _apply_engine_state(self, state: str) -> None:
         running = state == "running"
-        self.status_var.set("실행 중" if running else "정지됨")
-        self.start_btn.config(state="disabled" if running else "normal")
-        self.stop_btn.config(state="normal" if running else "disabled")
+        mode = self.app.run_mode
+        if running and mode == "arena":
+            self.status_var.set("아레나 실행 중")
+        else:
+            self.status_var.set("실행 중" if running else "정지됨")
+        start, stop, arena_start, arena_stop = _button_states(running, mode)
+        self.start_btn.config(state=start)
+        self.stop_btn.config(state=stop)
+        self.arena_btn.config(state=arena_start)
+        self.arena_stop_btn.config(state=arena_stop)
+        if not running and self._pending_start_mode is not None:
+            self.after(0, self._continue_pending_start)
 
     def _drain_log(self) -> None:
         try:
@@ -543,9 +611,23 @@ class ControlWindow(tk.Tk):
         self.destroy()
 
 
+def _button_states(
+    running: bool, mode: str | None
+) -> tuple[str, str, str, str]:
+    if not running:
+        return "normal", "disabled", "normal", "disabled"
+    if mode == "arena":
+        return "normal", "disabled", "disabled", "normal"
+    return "disabled", "normal", "normal", "disabled"
+
+
 def _parse_fps(raw: str, fallback: float) -> float:
     try:
         return max(0.2, float(raw))
     except ValueError:
         return fallback
+
+
+def _is_user_selectable_module(module) -> bool:
+    return module.key != ARENA_MODULE_KEY
 
