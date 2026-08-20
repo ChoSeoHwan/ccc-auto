@@ -89,8 +89,7 @@ class Engine:
     def stop(self, timeout: float = 5.0) -> None:
         if not self.running:
             return
-        self._emit("정지 요청...")
-        self._stop.set()
+        self.request_stop()
         assert self._thread is not None
         self._thread.join(timeout=timeout)
         if self._thread.is_alive():
@@ -98,6 +97,13 @@ class Engine:
         self._thread = None
         self._set_state("stopped")
         self._emit("자동화 정지됨.")
+
+    def request_stop(self) -> None:
+        """작업 스레드를 기다리지 않고 정지 신호만 보낸다."""
+        if not self.running or self._stop.is_set():
+            return
+        self._emit("정지 요청...")
+        self._stop.set()
 
     # ------------------------------------------------------------------
     def _loop(self) -> None:
